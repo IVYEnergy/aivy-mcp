@@ -1,0 +1,36 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "aivy-mcp"
+version = "0.1.0"
+description = "MCP server for the Aivy Developer API: let your AI assistant read and control your own solar + battery system."
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.10"
+authors = [{ name = "Ivy Energy" }]
+keywords = ["mcp", "solar", "battery", "energy", "amber", "sungrow", "sigenergy", "home-energy"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: End Users/Desktop",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: Apache Software License",
+  "Programming Language :: Python :: 3",
+  "Topic :: Home Automation",
+]
+dependencies = [
+  "mcp>=1.2",
+  "httpx>=0.27",
+]
+
+[project.urls]
+Homepage = "https://github.com/IVYEnergy/aivy-mcp"
+Documentation = "https://bridge.ivyenergy.com.au/v1/docs"
+"API guide" = "https://bridge.ivyenergy.com.au/v1/llms.txt"
+
+[project.scripts]
+aivy-mcp = "aivy_mcp.server:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/aivy_mcp"]
