@@ -95,6 +95,23 @@ A transcript can also be a plain list: `[{"name": "get_status", "args": {}}]`,
 or `{"calls": [...], "text": "final reply"}`. Run the cases after changing
 the playbook, the tool descriptions or the model.
 
+## Cards in chat
+
+Hosts that render [MCP Apps](https://github.com/modelcontextprotocol/ext-apps)
+(and ChatGPT through its Apps SDK) show three of the tools as cards instead
+of text, in the same style as the Aivy mobile app, light and dark:
+
+| Tool | Card |
+|---|---|
+| `get_status` | SOC ring and the four power flows (solar, home, grid, battery) |
+| `get_prices` | Buying / selling now, the next hours as bars, the best hours to sell highlighted |
+| `plan_best_price_discharge` | Revenue headline, the chosen windows on a timeline and an **Apply** button; the click is the user's yes and calls `set_energy_mode` |
+
+Every card is one self-contained HTML document (no network, no assets), so
+it works under the extension's default content security policy. Hosts
+without the extension get the same data as JSON. To look at the cards
+locally: `node tests/ui/shoot.mjs` (needs `playwright`).
+
 ## Tools
 
 | Tool | Changes anything? | What it does |

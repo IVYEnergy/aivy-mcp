@@ -22,10 +22,41 @@ except ModuleNotFoundError:  # mcp 1.x
     from mcp.server.fastmcp import FastMCP as _Server
 
 from aivy_mcp.client import AivyClient, AivyError
+from aivy_mcp.ui import UI_URIS, UI_URIS_BY_NAME, render_template
 
-mcp = _Server(
-    "aivy",
-    instructions=(
+# Cards in chat (MCP Apps, io.modelcontextprotocol/ui; ChatGPT reads the
+# same resources through its openai/* aliases). The extension needs mcp 2.x;
+# on 1.x the tools still work, as text.
+try:
+    from mcp.server.apps import Apps
+    apps: "Apps | None" = Apps()
+except Exception:  # noqa: BLE001 — older SDK
+    apps = None
+
+
+# The SDK reads an extension's tools and resources when the server is built,
+# so the server is constructed at the bottom of this module, after every
+# tool is defined. Plain tools are collected here and registered then.
+_PLAIN_TOOLS: list[tuple[Any, dict[str, Any]]] = []
+
+
+def _tool(**kwargs: Any):
+    def register(fn):
+        _PLAIN_TOOLS.append((fn, kwargs))
+        return fn
+    return register
+
+
+def ui_tool(resource_uri: str, *, invoking: str, invoked: str):
+    """Decorator: a tool whose result the host may render as a card."""
+    meta = {"openai/outputTemplate": resource_uri, "openai/toolInvocation/invoking": invoking,
+            "openai/toolInvocation/invoked": invoked}
+    if apps is not None:
+        return apps.tool(resource_uri=resource_uri, meta=meta)
+    return _tool(meta=meta)
+
+
+_INSTRUCTIONS = (
         "Tools for the user's own solar + battery system through the Aivy platform (Ivy Energy, Australia). "
         "Call list_sites first; every other tool takes one of its site ids (vendor:station_id). "
         "Power is in watts (battery_w > 0 charging, grid_w > 0 exporting), SOC in percent, prices in "
@@ -36,8 +67,11 @@ mcp = _Server(
         "No site yet? list_vendors then connect_site links the user's own system. "
         "Call get_agent_guide once at the start of a conversation: it is the playbook (which tools answer "
         "which questions, when to confirm, how to report) and takes precedence over guesses."
-    ),
 )
+
+# Site names seen in list_sites, so a status card can show "Home" rather
+# than "sungrow:1445844" without a second API call.
+_site_names: dict[str, str] = {}
 
 _client: AivyClient | None = None
 
@@ -65,7 +99,7 @@ async def _run(coro) -> str:
 PLAYBOOK = (Path(__file__).parent / "playbook.md").read_text(encoding="utf-8")
 
 
-@mcp.tool()
+@_tool()
 async def get_agent_guide() -> str:
     """The Aivy agent playbook: which tools answer which questions, the rules for writes (confirm first, forced
     mode is time-boxed, never guess numbers, do not poll), the step-by-step workflows (status, diagnosis, prices,
@@ -76,20 +110,27 @@ async def get_agent_guide() -> str:
 
 # ── account / sites ──
 
-@mcp.tool()
+@_tool()
 async def whoami() -> str:
     """Check the API key: who it belongs to and whether it may control (scope read or control)."""
     return await _run(_c().me())
 
 
-@mcp.tool()
+@_tool()
 async def list_sites() -> str:
     """List the user's solar + battery sites across vendors. Returns id (vendor:station_id, used by every other
     tool), vendor, name, online and the vendor's headline power in W. Start here."""
-    return await _run(_c().sites())
+    try:
+        out = await _c().sites()
+    except AivyError as e:
+        return _dump({"error": str(e)})
+    for site in out.get("sites", []):
+        if site.get("id") and site.get("name"):
+            _site_names[site["id"]] = site["name"]
+    return _dump(out)
 
 
-@mcp.tool()
+@_tool()
 async def get_site(site_id: str) -> str:
     """Facts about one site: timezone, battery capacity (kWh) and where that figure came from, max charge/discharge
     power (W), export limit (W), the SOC floor Ai+ keeps, live SOC and usable kWh, current energy mode and
@@ -97,14 +138,21 @@ async def get_site(site_id: str) -> str:
     return await _run(_c().site(site_id))
 
 
-@mcp.tool()
-async def get_status(site_id: str) -> str:
+@ui_tool(UI_URIS_BY_NAME["status"], invoking="Reading the battery", invoked="Live status")
+async def get_status(site_id: str) -> dict[str, Any]:
     """Live reading: SOC (%), pv_w, load_w, grid_w (>0 exporting), battery_w (>0 charging). A null channel is one
-    the vendor does not report, not zero. `source` is vendor (fresh) or stored (last kept reading)."""
-    return await _run(_c().status(site_id))
+    the vendor does not report, not zero. `source` is vendor (fresh) or stored (last kept reading).
+    Hosts that support cards render this as a status card."""
+    try:
+        out = await _c().status(site_id)
+    except AivyError as e:
+        return {"error": str(e), "id": site_id}
+    if site_id in _site_names:
+        out["name"] = _site_names[site_id]
+    return out
 
 
-@mcp.tool()
+@_tool()
 async def get_curve(site_id: str, range: str = "1d", day: str | None = None) -> str:
     """Power and SOC history. range 1d = 5-minute points for one local day (day = YYYY-MM-DD, default today);
     7d / 30d = daily values. Returns times (UTC), local_times, and series per channel (pv, load, battery, grid,
@@ -112,7 +160,7 @@ async def get_curve(site_id: str, range: str = "1d", day: str | None = None) -> 
     return await _run(_c().curve(site_id, range, day))
 
 
-@mcp.tool()
+@_tool()
 async def get_earnings(site_id: str, date: str | None = None, window_start: str | None = None,
                        window_end: str | None = None) -> str:
     """Energy bought, sold and self-consumed for a day (YYYY-MM-DD, 'today' or 'yesterday'), priced at the actual
@@ -121,24 +169,27 @@ async def get_earnings(site_id: str, date: str | None = None, window_start: str 
     return await _run(_c().earnings(site_id, date, window_start, window_end))
 
 
-@mcp.tool()
+@_tool()
 async def get_operations(site_id: str, limit: int = 20) -> str:
     """What the platform did to the site and why, newest first: each automatic (Ai+) and manual command with its
     reason and the prices at the time. Use it to explain 'why did it charge at 3am'."""
     return await _run(_c().operations(site_id, limit))
 
 
-@mcp.tool()
-async def get_prices(site_id: str, hours: int = 8, resolution: int = 30) -> str:
+@ui_tool(UI_URIS_BY_NAME["prices"], invoking="Fetching Amber prices", invoked="Prices")
+async def get_prices(site_id: str, hours: int = 8, resolution: int = 30) -> dict[str, Any]:
     """Amber Electric prices for the site: the current interval and the forecast as import price and feed-in earn
     (c/kWh incl. GST), with a summary of cheapest/dearest periods. resolution 30 (up to 24 h) or 5 (up to 4 h).
-    Fails with 409 when no Amber account is linked to the site."""
-    return await _run(_c().prices(site_id, hours, resolution))
+    Fails with 409 when no Amber account is linked to the site. Hosts that support cards render a price chart."""
+    try:
+        return await _c().prices(site_id, hours, resolution)
+    except AivyError as e:
+        return {"error": str(e), "id": site_id}
 
 
 # ── connecting systems ──
 
-@mcp.tool()
+@_tool()
 async def list_vendors() -> str:
     """Every inverter / battery brand Aivy can connect, whether it is available on this deployment, what
     connecting one needs (`connect`: serial + NMI, a system id, or an OAuth sign-in at the vendor) and how much
@@ -146,7 +197,7 @@ async def list_vendors() -> str:
     return await _run(_c().vendors())
 
 
-@mcp.tool()
+@_tool()
 async def connect_site(vendor: str, sn: str | None = None, nmi: str | None = None, system_id: str | None = None,
                        region: str = "AU") -> str:
     """CHANGES THE ACCOUNT (control scope). Confirm with the user before calling.
@@ -162,7 +213,7 @@ async def connect_site(vendor: str, sn: str | None = None, nmi: str | None = Non
     return await _run(_c().connect_site(body))
 
 
-@mcp.tool()
+@_tool()
 async def disconnect_site(site_id: str) -> str:
     """CHANGES THE ACCOUNT (control scope). Confirm with the user before calling.
 
@@ -173,14 +224,14 @@ async def disconnect_site(site_id: str) -> str:
 
 # ── alerts ──
 
-@mcp.tool()
+@_tool()
 async def list_alerts(site_id: str) -> str:
     """The account's alert rules on a site: what each watches (soc %, import/export price c/kWh, forecast
     temperature °C), above/below which threshold, whether it emails, and when it last fired."""
     return await _run(_c().alerts(site_id))
 
 
-@mcp.tool()
+@_tool()
 async def create_alert(site_id: str, name: str, metric: str, operator: str, threshold: float,
                        email: bool = False, cooldown_minutes: int = 360, message: str = "",
                        active_start: str = "00:00", active_end: str = "00:00", locale: str = "en") -> str:
@@ -195,20 +246,20 @@ async def create_alert(site_id: str, name: str, metric: str, operator: str, thre
     return await _run(_c().create_alert(site_id, body))
 
 
-@mcp.tool()
+@_tool()
 async def delete_alert(site_id: str, rule_id: int) -> str:
     """Retire an alert rule (past firings stay in the inbox). Confirm with the user first."""
     return await _run(_c().delete_alert(site_id, rule_id))
 
 
-@mcp.tool()
+@_tool()
 async def get_alert_events(site_id: str, limit: int = 20) -> str:
     """What fired on the site, newest first: the rule, the value that tripped it, when, how it was delivered and
     whether it was emailed. Use for 'did anything happen overnight?'."""
     return await _run(_c().alert_events(site_id, limit))
 
 
-@mcp.tool()
+@_tool()
 async def send_test_alert_email() -> str:
     """Send one test alert email to the account's verified address so the person sees what an alert looks like.
     409 when the account has no verified email."""
@@ -217,14 +268,14 @@ async def send_test_alert_email() -> str:
 
 # ── control ──
 
-@mcp.tool()
+@_tool()
 async def get_energy_mode(site_id: str) -> str:
     """Current energy mode (selfConsumption | amber_smart = Ai+ | forced), its forced windows, the SOC floor, the
     Ai+ variant and settings when on Ai+, and any pending timed hand-back (reverts_at / reverts_to)."""
     return await _run(_c().energy_mode(site_id))
 
 
-@mcp.tool()
+@_tool(meta={"openai/widgetAccessible": True})
 async def set_energy_mode(
     site_id: str,
     mode: str,
@@ -254,14 +305,14 @@ async def set_energy_mode(
     return await _run(_c().set_energy_mode(site_id, body))
 
 
-@mcp.tool()
+@_tool()
 async def get_ai_plus(site_id: str) -> str:
     """Ai+ (amber_smart) configuration: active or not, engine variant and options, effective settings, and
     `tunable`: every lever with type, min, max, unit and default. Read before update_ai_plus."""
     return await _run(_c().ai_plus(site_id))
 
 
-@mcp.tool()
+@_tool()
 async def update_ai_plus(site_id: str, settings: dict[str, Any] | None = None, variant: str | None = None) -> str:
     """CHANGES THE SITE (control scope). Confirm with the user before calling.
 
@@ -273,21 +324,27 @@ async def update_ai_plus(site_id: str, settings: dict[str, Any] | None = None, v
 
 # ── planning (nothing is applied) ──
 
-@mcp.tool()
+@ui_tool(UI_URIS_BY_NAME["plan"], invoking="Planning the sale", invoked="Sell plan")
 async def plan_best_price_discharge(site_id: str, window_start: str | None = None, window_end: str | None = None,
                                     reserve_soc: int | None = None, min_sell_c: float | None = None,
-                                    battery_capacity_kwh: float | None = None) -> str:
+                                    battery_capacity_kwh: float | None = None) -> dict[str, Any]:
     """Propose when to sell: picks the best-paid Amber intervals in the window (HH:MM) for the battery's usable
     energy above reserve_soc, optionally only above min_sell_c c/kWh. Returns intervals, expected revenue, the
     average it beats and proposed time_slots. Nothing is applied; apply with set_energy_mode(mode='forced',
-    time_slots=...) after the user agrees."""
+    time_slots=...) after the user agrees. Hosts that support cards show the plan with an Apply button; a click
+    on it is the user's yes."""
     body = {k: v for k, v in {"window_start": window_start, "window_end": window_end, "reserve_soc": reserve_soc,
                               "min_sell_c": min_sell_c, "battery_capacity_kwh": battery_capacity_kwh}.items()
             if v is not None}
-    return await _run(_c().plan_best_price_discharge(site_id, body))
+    try:
+        out = await _c().plan_best_price_discharge(site_id, body)
+    except AivyError as e:
+        return {"error": str(e), "site_id": site_id}
+    out["site_id"] = site_id  # the card's Apply button needs it
+    return out
 
 
-@mcp.tool()
+@_tool()
 async def plan_discharge_to_target(site_id: str, end: str, target_soc: int, start: str | None = None,
                                    battery_capacity_kwh: float | None = None) -> str:
     """Propose a steady discharge that lands on target_soc at end (HH:MM, site local), from the real capacity, SOC
@@ -298,6 +355,18 @@ async def plan_discharge_to_target(site_id: str, end: str, target_soc: int, star
     if battery_capacity_kwh:
         body["battery_capacity_kwh"] = battery_capacity_kwh
     return await _run(_c().plan_discharge_to_target(site_id, body))
+
+
+# ── server ──
+
+if apps is not None:
+    for _uri, _name in UI_URIS.items():
+        apps.add_html_resource(_uri, render_template(_name), name=f"aivy-{_name}-card",
+                               title=f"Aivy {_name} card", prefers_border=True)
+
+mcp = _Server("aivy", instructions=_INSTRUCTIONS, **({"extensions": [apps]} if apps is not None else {}))
+for _fn, _kwargs in _PLAIN_TOOLS:
+    mcp.tool(**_kwargs)(_fn)
 
 
 def main() -> None:

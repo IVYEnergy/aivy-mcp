@@ -1,0 +1,38 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Aivy card host (test)</title>
+<style>body{margin:0;padding:16px;background:#eef0f4;font-family:system-ui}body[data-theme=dark]{background:#0f1113}iframe{border:0;width:100%;max-width:600px;display:block;height:60px}</style></head>
+<body>
+<!-- A minimal MCP Apps host: answers ui/initialize, sends the sample tool
+     result after ui/notifications/initialized, grows the iframe on
+     size-changed, and records tools/call so the Apply button can be tested. -->
+<iframe id="f" sandbox="allow-scripts"></iframe>
+<script>
+const q = new URLSearchParams(location.search);
+const theme = q.get('theme') || 'light';
+document.body.dataset.theme = theme;
+window.calls = [];
+const f = document.getElementById('f');
+window.addEventListener('message', async (ev) => {
+  const m = ev.data; if (!m || m.jsonrpc !== '2.0') return;
+  const reply = (id, result) => f.contentWindow.postMessage({ jsonrpc: '2.0', id, result }, '*');
+  if (m.method === 'ui/initialize') reply(m.id, { protocolVersion: '2026-01-26', hostInfo: { name: 'test-host' }, hostCapabilities: {}, hostContext: { theme } });
+  else if (m.method === 'ui/notifications/initialized') f.contentWindow.postMessage({ jsonrpc: '2.0', method: 'ui/notifications/tool-result', params: { content: [{ type: 'text', text: JSON.stringify(window.SAMPLE) }], structuredContent: window.SAMPLE } }, '*');
+  else if (m.method === 'ui/notifications/size-changed') f.style.height = Math.min(1200, m.params.height + 2) + 'px';
+  else if (m.method === 'tools/call') { window.calls.push(m.params); reply(m.id, { content: [{ type: 'text', text: JSON.stringify({ ok: true, energy_mode: 'forced', reverts_at: new Date(Date.now() + 3600e3).toISOString() }) }] }); }
+  else if (m.method === 'ui/open-link') reply(m.id, {});
+});
+fetch(q.get('card') + '.html').then(r => r.text()).then(html => {
+  window.SAMPLE = SAMPLES[q.get('card')];
+  f.srcdoc = html;
+});
+const SAMPLES = {
+  status: { id: 'sungrow:1445844', name: 'Home', at: new Date().toISOString(), soc_pct: 72.5, pv_w: 4213, load_w: 1180, grid_w: 1533, battery_w: 1500, source: 'vendor' },
+  plan: { site_id: 'sungrow:1445844', soc_now: 86.0, reserve_soc: 20, capacity_kwh: 12.8, current_mode: 'amber_smart', timezone: 'Australia/Adelaide', window_start: '16:30', window_end: '22:00',
+          intervals: [{ date: '2026-11-06', start: '17:30', end: '18:00', sell_c: 48.2, kwh: 2.5, power_w: 5000 }, { date: '2026-11-06', start: '18:00', end: '18:30', sell_c: 66.9, kwh: 2.5, power_w: 5000 }, { date: '2026-11-06', start: '18:30', end: '19:00', sell_c: 41.0, kwh: 1.8, power_w: 3600 }],
+          slots: [], proposed_time_slots: [{ type: 'discharge', start: '17:30', end: '19:00', power: 5000, stop_soc: 20 }], conflicts: [], energy_kwh: 6.8, unplaced_kwh: 0, revenue_dollars: 3.61, avg_sell_c: 53.1, window_avg_sell_c: 29.4, power_w: 5000,
+          notes: ['Forced-mode windows repeat every day until the schedule is changed.', 'Applying switches this station from Ai+ to forced mode; Ai+ trading pauses until switched back.'] },
+  prices: { timezone: 'Australia/Adelaide', currency: 'c/kWh', resolution_minutes: 30, summary: { spike_ahead: false, buy_min_c: 8.1, buy_max_c: 52.3, sell_min_c: 2.0, sell_max_c: 66.9, peak_sell_window: { start: '17:30', end: '19:00' }, cheap_buy_window: { start: '12:00', end: '14:00' } },
+            rows: Array.from({ length: 16 }, (_, i) => { const h = 12 + Math.floor(i / 2), m = i % 2 ? '30' : '00'; const peak = i >= 11 && i <= 13; return { date: '2026-11-06', start: `${h}:${m}`, end: `${h + (m === '30' ? 1 : 0)}:${m === '30' ? '00' : '30'}`, buy_c: peak ? 52.3 - (i - 11) * 6 : 8.1 + i * 1.7, sell_c: peak ? 66.9 - (i - 11) * 12 : 2.0 + i * 1.1, kind: i === 0 ? 'current' : 'forecast', spike: false }; }) },
+};
+</script>
+</body></html>

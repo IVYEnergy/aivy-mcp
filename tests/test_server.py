@@ -120,3 +120,42 @@ def test_eval_checker_judges_order_forbidden_tools_and_confirmation():
         f.write("\n".join(lines)); path = f.name
     calls, text = check.load_transcript(path); os.unlink(path)
     assert calls == [{"name": "get_status", "args": {"site_id": "sungrow:1"}}] and text == "At 55%."
+
+
+def test_cards_are_registered_as_mcp_apps_resources_and_linked_to_their_tools():
+    """status / plan / prices tools point at ui:// resources; each resource
+    is a self-contained HTML document with the bridge and styles inlined."""
+    from aivy_mcp.ui import UI_URIS, UI_URIS_BY_NAME, render_template
+    if server.apps is None:
+        pytest.skip("mcp 1.x: no MCP Apps extension")
+    from mcp.server.apps import APP_MIME_TYPE
+    resources = {str(r.uri): r for r in asyncio.run(server.mcp.list_resources())}
+    assert set(UI_URIS) <= set(resources)
+    for uri in UI_URIS:
+        assert (resources[uri].mime_type or getattr(resources[uri], "mimeType", None)) == APP_MIME_TYPE
+    tools = {t.name: t for t in asyncio.run(server.mcp.list_tools())}
+    for name, uri in (("get_status", UI_URIS_BY_NAME["status"]), ("plan_best_price_discharge", UI_URIS_BY_NAME["plan"]),
+                      ("get_prices", UI_URIS_BY_NAME["prices"])):
+        meta = tools[name].meta or {}
+        assert meta["ui"]["resourceUri"] == uri and meta["openai/outputTemplate"] == uri
+        assert tools[name].output_schema, "structured output feeds the card"
+    assert (tools["set_energy_mode"].meta or {}).get("openai/widgetAccessible") is True
+    for name in UI_URIS_BY_NAME:
+        html = render_template(name)
+        assert html.startswith("<!doctype html>") and "window.AivyBridge" in html and "--brand:" in html
+        assert "/*BRIDGE_JS*/" not in html and "/*BASE_CSS*/" not in html
+        assert "http://" not in html.replace("http://www.w3.org/2000/svg", "") and "https://" not in html, "no external assets"
+
+
+def test_status_card_data_carries_the_site_name_when_known(monkeypatch):
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/sites"):
+            return httpx.Response(200, json={"sites": [{"id": "sungrow:1", "name": "Home", "vendor": "sungrow"}], "warnings": []})
+        return httpx.Response(200, json={"id": "sungrow:1", "soc_pct": 55, "pv_w": 100, "source": "vendor", "at": "2026-11-06T00:00:00+00:00"})
+
+    monkeypatch.setattr(server, "_client", _client_with(handler))
+    asyncio.run(server.list_sites())
+    out = asyncio.run(server.get_status("sungrow:1"))
+    assert isinstance(out, dict) and out["name"] == "Home" and out["soc_pct"] == 55
+    plan = asyncio.run(server.plan_best_price_discharge("sungrow:1"))
+    assert plan["site_id"] == "sungrow:1"

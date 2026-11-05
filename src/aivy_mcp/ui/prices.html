@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aivy prices</title>
+<style>/*BASE_CSS*/
+.now { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 6px 0 12px; }
+.now .box { background: var(--fill); border-radius: 12px; padding: 10px 12px; }
+.now .k { font-size: 11px; color: var(--text3); text-transform: uppercase; letter-spacing: .4px; }
+.now .v { font-size: 24px; font-weight: 700; letter-spacing: -.5px; margin-top: 2px; }
+.now .v small { font-size: 12px; font-weight: 500; color: var(--text3); margin-left: 3px; }
+.now .sell .v { color: var(--brand); }
+.chart { position: relative; }
+.chart svg { width: 100%; height: 150px; display: block; }
+.legend { display: flex; gap: 14px; font-size: 11px; color: var(--text3); margin: 6px 0 0; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+.windows { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="card-head">
+    <div class="mark"><svg viewBox="0 0 24 24"><path d="M3 17l5-6 4 4 5-8 4 5"/></svg></div>
+    <div><div class="title">Amber prices</div><div class="sub" id="sub"></div></div>
+    <div class="spacer"></div>
+    <span class="chip danger" id="spike" hidden>spike ahead</span>
+  </div>
+  <div class="card-body">
+    <div class="empty" id="empty">Fetching prices…</div>
+    <div id="main" hidden>
+      <div class="now">
+        <div class="box buy"><div class="k">Buying now</div><div class="v" id="buy">--<small>c/kWh</small></div></div>
+        <div class="box sell"><div class="k">Selling now</div><div class="v" id="sell">--<small>c/kWh</small></div></div>
+      </div>
+      <div class="chart"><svg id="svg" viewBox="0 0 560 150" preserveAspectRatio="none"></svg></div>
+      <div class="legend"><span><i style="background:var(--info)"></i>import</span><span><i style="background:var(--brand)"></i>feed-in earn</span><span><i style="background:var(--gold);opacity:.5"></i>best hours to sell</span></div>
+      <div class="windows" id="windows"></div>
+    </div>
+  </div>
+  <div class="card-foot"><span>c/kWh, GST included · Amber Electric</span><span class="spacer"></span><span id="res"></span></div>
+</div>
+<script>/*BRIDGE_JS*/</script>
+<script>
+(function () {
+  var B = window.AivyBridge, $ = function (id) { return document.getElementById(id); };
+  var NS = 'http://www.w3.org/2000/svg';
+  function el(tag, attrs, text) { var e = document.createElementNS(NS, tag); for (var k in attrs) e.setAttribute(k, attrs[k]); if (text !== undefined) e.textContent = text; return e; }
+  B.onData(function (d) {
+    if (d.error) { $('empty').innerHTML = '<span class="err">' + B.esc(d.error) + '</span>'; return; }
+    var rows = (d.rows || []).filter(function (r) { return r.kind !== 'actual'; }).slice(0, 24);
+    if (!rows.length) { $('empty').textContent = 'No forecast available.'; return; }
+    $('empty').hidden = true; $('main').hidden = false;
+    $('sub').textContent = (rows[0].start || '') + ' onwards' + (d.timezone ? ' · ' + d.timezone : '');
+    $('res').textContent = d.resolution_minutes ? d.resolution_minutes + '-minute intervals' : '';
+    var s = d.summary || {}; $('spike').hidden = !s.spike_ahead;
+    var cur = (d.rows || []).filter(function (r) { return r.kind === 'current'; })[0] || rows[0];
+    $('buy').innerHTML = B.esc(cur.buy_c === null ? '--' : cur.buy_c) + '<small>c/kWh</small>';
+    $('sell').innerHTML = B.esc(cur.sell_c === null ? '--' : cur.sell_c) + '<small>c/kWh</small>';
+    // chart
+    var svg = $('svg'); while (svg.firstChild) svg.removeChild(svg.firstChild);
+    var W = 560, H = 150, padL = 34, padB = 22, padT = 8, n = rows.length, bw = (W - padL - 8) / n;
+    var vals = []; rows.forEach(function (r) { if (r.buy_c !== null) vals.push(r.buy_c); if (r.sell_c !== null) vals.push(r.sell_c); });
+    var max = Math.max(10, Math.max.apply(null, vals)), min = Math.min(0, Math.min.apply(null, vals));
+    var y = function (v) { return padT + (H - padT - padB) * (1 - (v - min) / (max - min)); };
+    var y0 = y(0);
+    // peak sell window shading
+    var peak = s.peak_sell_window; if (peak && peak.start) {
+      var i0 = rows.findIndex(function (r) { return r.start === peak.start; }), i1 = rows.findIndex(function (r) { return r.end === peak.end; });
+      if (i0 >= 0) { if (i1 < i0) i1 = n - 1; svg.appendChild(el('rect', { x: padL + i0 * bw, y: padT, width: (i1 - i0 + 1) * bw, height: H - padT - padB, fill: 'var(--gold)', opacity: .18, rx: 4 })); }
+    }
+    [min, 0, max].forEach(function (v) { if (v === 0 && min === 0) return; svg.appendChild(el('line', { x1: padL, x2: W - 8, y1: y(v), y2: y(v), stroke: 'var(--border)', 'stroke-width': 1 })); svg.appendChild(el('text', { x: padL - 6, y: y(v) + 4, 'text-anchor': 'end', 'font-size': 10, fill: 'var(--text3)' }, Math.round(v))); });
+    rows.forEach(function (r, i) {
+      var x = padL + i * bw + 1, w = Math.max(2, bw / 2 - 1.5);
+      if (r.buy_c !== null && r.buy_c !== undefined) svg.appendChild(el('rect', { x: x, y: Math.min(y(r.buy_c), y0), width: w, height: Math.abs(y0 - y(r.buy_c)), fill: 'var(--info)', opacity: r.kind === 'current' ? 1 : .75, rx: 1.5 }));
+      if (r.sell_c !== null && r.sell_c !== undefined) svg.appendChild(el('rect', { x: x + w + 1, y: Math.min(y(r.sell_c), y0), width: w, height: Math.abs(y0 - y(r.sell_c)), fill: r.spike ? 'var(--danger)' : 'var(--brand)', opacity: r.kind === 'current' ? 1 : .75, rx: 1.5 }));
+      if (i % Math.ceil(n / 6) === 0) svg.appendChild(el('text', { x: x + bw / 2, y: H - 6, 'text-anchor': 'middle', 'font-size': 10, fill: 'var(--text3)' }, r.start));
+    });
+    var wins = [];
+    if (s.peak_sell_window) wins.push('<span class="chip brand">sell ' + B.esc(s.peak_sell_window.start) + '–' + B.esc(s.peak_sell_window.end) + (s.sell_max_c ? ' · up to ' + B.esc(s.sell_max_c) + 'c' : '') + '</span>');
+    if (s.cheap_buy_window) wins.push('<span class="chip">cheap ' + B.esc(s.cheap_buy_window.start) + '–' + B.esc(s.cheap_buy_window.end) + (s.buy_min_c !== undefined ? ' · from ' + B.esc(s.buy_min_c) + 'c' : '') + '</span>');
+    $('windows').innerHTML = wins.join('');
+    B.resize();
+  });
+})();
+</script>
+</body>
+</html>

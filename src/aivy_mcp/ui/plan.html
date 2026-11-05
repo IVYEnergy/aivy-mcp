@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aivy sell plan</title>
+<style>/*BASE_CSS*/
+.headline { display: flex; align-items: baseline; gap: 10px; margin: 6px 0 2px; }
+.headline .big { font-size: 34px; font-weight: 700; letter-spacing: -1px; color: var(--brand); line-height: 1; }
+.headline .what { color: var(--text2); font-size: 13px; }
+.facts { display: flex; flex-wrap: wrap; gap: 6px 14px; color: var(--text2); font-size: 12px; margin: 8px 0 12px; }
+.facts b { color: var(--text); font-weight: 600; }
+.timeline { position: relative; height: 34px; background: var(--fill); border-radius: 8px; overflow: hidden; margin: 4px 0 6px; }
+.timeline .win { position: absolute; top: 6px; bottom: 6px; background: var(--brand); border-radius: 4px; opacity: .9; }
+.timeline .win span { position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%); text-align: center; font-size: 10px; color: #fff; font-weight: 600; white-space: nowrap; overflow: hidden; }
+.axis { display: flex; justify-content: space-between; font-size: 11px; color: var(--text3); margin-bottom: 10px; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+td, th { padding: 6px 4px; text-align: left; border-top: 1px solid var(--border); }
+th { color: var(--text3); font-weight: 500; font-size: 11px; text-transform: uppercase; letter-spacing: .4px; border-top: 0; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.notes { color: var(--text3); font-size: 12px; margin: 10px 0 0; }
+.notes li { margin: 2px 0 2px 14px; }
+.actions { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
+.state { font-size: 12px; color: var(--text2); }
+.state.ok { color: var(--brand); } .state.bad { color: var(--danger); }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="card-head">
+    <div class="mark"><svg viewBox="0 0 24 24"><path d="M7 17 17 7"/><path d="M9 7h8v8"/></svg></div>
+    <div><div class="title">Sell at the best prices</div><div class="sub" id="sub"></div></div>
+    <div class="spacer"></div>
+    <span class="chip" id="mode"></span>
+  </div>
+  <div class="card-body">
+    <div class="empty" id="empty">Working out the plan…</div>
+    <div id="plan" hidden>
+      <div class="headline"><span class="big" id="revenue">$0.00</span><span class="what" id="what"></span></div>
+      <div class="facts" id="facts"></div>
+      <div class="timeline" id="timeline"></div>
+      <div class="axis"><span id="t0"></span><span id="t1"></span></div>
+      <table><thead><tr><th>Window</th><th class="num">Price</th><th class="num">Energy</th><th class="num">Power</th></tr></thead><tbody id="rows"></tbody></table>
+      <ul class="notes" id="notes"></ul>
+      <div class="actions"><button class="btn" id="apply">Apply this plan</button><span class="state" id="state"></span></div>
+    </div>
+  </div>
+  <div class="card-foot"><span>Applying switches the site to forced mode for these windows; it returns to its previous mode afterwards.</span></div>
+</div>
+<script>/*BRIDGE_JS*/</script>
+<script>
+(function () {
+  var B = window.AivyBridge, $ = function (id) { return document.getElementById(id); };
+  function mins(hhmm) { var p = (hhmm || '00:00').split(':'); return (+p[0]) * 60 + (+p[1]); }
+  B.onData(function (d) {
+    if (d.error) { $('empty').innerHTML = '<span class="err">' + B.esc(d.error) + '</span>'; return; }
+    $('sub').textContent = (d.window_start && d.window_end ? d.window_start + ' to ' + d.window_end : '') + (d.timezone ? ' · ' + d.timezone : '');
+    if (d.current_mode) { $('mode').textContent = d.current_mode === 'amber_smart' ? 'Ai+ now' : d.current_mode; }
+    if (d.nothing_to_do || !(d.intervals && d.intervals.length)) {
+      $('empty').textContent = d.reason || 'Nothing to sell in this window.'; return;
+    }
+    $('empty').hidden = true; $('plan').hidden = false;
+    $('revenue').textContent = B.money(d.revenue_dollars);
+    $('what').textContent = 'for ' + (d.energy_kwh || 0) + ' kWh';
+    var facts = [];
+    if (d.avg_sell_c) facts.push('<span>average <b>' + d.avg_sell_c + ' c/kWh</b></span>');
+    if (d.window_avg_sell_c) facts.push('<span>window average <b>' + d.window_avg_sell_c + ' c/kWh</b></span>');
+    if (d.soc_now !== undefined) facts.push('<span>SOC <b>' + d.soc_now + '%</b> down to <b>' + d.reserve_soc + '%</b></span>');
+    if (d.unplaced_kwh) facts.push('<span class="err">' + d.unplaced_kwh + ' kWh unplaced</span>');
+    $('facts').innerHTML = facts.join('');
+    // timeline across the planning window (crosses midnight when end < start)
+    var s0 = mins(d.window_start), s1 = mins(d.window_end); if (s1 <= s0) s1 += 1440;
+    var span = Math.max(60, s1 - s0), tl = $('timeline'); tl.innerHTML = '';
+    (d.intervals || []).forEach(function (iv) {
+      var a = mins(iv.start), b = mins(iv.end); if (a < s0) a += 1440; if (b <= a) b += 1440;
+      var el = document.createElement('div'); el.className = 'win';
+      el.style.left = ((a - s0) / span * 100) + '%'; el.style.width = (Math.max(1, b - a) / span * 100) + '%';
+      el.innerHTML = '<span>' + B.esc(iv.sell_c) + 'c</span>'; tl.appendChild(el);
+    });
+    $('t0').textContent = d.window_start || ''; $('t1').textContent = d.window_end || '';
+    $('rows').innerHTML = (d.intervals || []).map(function (iv) {
+      return '<tr><td>' + B.esc(iv.start) + ' – ' + B.esc(iv.end) + '</td><td class="num">' + B.esc(iv.sell_c) + ' c</td><td class="num">' + B.esc(iv.kwh) + ' kWh</td><td class="num">' + B.kw(iv.power_w, 1) + '</td></tr>';
+    }).join('');
+    var notes = (d.notes || []).slice(); (d.conflicts || []).forEach(function (c) { notes.push('Replaces: ' + (typeof c === 'string' ? c : JSON.stringify(c))); });
+    $('notes').innerHTML = notes.map(function (n) { return '<li>' + B.esc(n) + '</li>'; }).join('');
+    var btn = $('apply'), state = $('state');
+    btn.disabled = !(d.proposed_time_slots && d.proposed_time_slots.length) || !d.site_id;
+    btn.onclick = function () {
+      btn.disabled = true; state.className = 'state'; state.textContent = 'Applying…';
+      var last = d.intervals[d.intervals.length - 1]; var endM = mins(last.end), nowM = (function () { var n = new Date(); return n.getHours() * 60 + n.getMinutes(); })();
+      var dur = endM - nowM; if (dur <= 0) dur += 1440; dur = Math.min(1440, Math.max(15, dur + 15));
+      B.callTool('set_energy_mode', { site_id: d.site_id, mode: 'forced', time_slots: d.proposed_time_slots, duration_minutes: dur })
+        .then(function (res) {
+          var out = res; if (res && res.content && res.content[0] && res.content[0].text) { try { out = JSON.parse(res.content[0].text); } catch (e) {} }
+          if (out && out.structuredContent) out = out.structuredContent;
+          if (out && out.error) { state.className = 'state bad'; state.textContent = out.error; btn.disabled = false; return; }
+          state.className = 'state ok'; state.textContent = 'Applied' + (out && out.reverts_at ? ' · hands back ' + new Date(out.reverts_at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) : '');
+          btn.textContent = 'Applied';
+        }).catch(function (e) { state.className = 'state bad'; state.textContent = (e && e.message) || 'Could not apply'; btn.disabled = false; });
+    };
+    B.resize();
+  });
+})();
+</script>
+</body>
+</html>
