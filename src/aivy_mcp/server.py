@@ -13,6 +13,7 @@ own (hand a forced mode back after its duration).
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import Any
 
 try:  # mcp 2.x
@@ -32,7 +33,9 @@ mcp = _Server(
         "Changing the mode or Ai+ settings needs a control-scope key; a forced (manual) mode set here is "
         "time-boxed and the server returns the site to its previous mode when the time is up. "
         "Sites named sandbox:... are shared demo data: readable, never controllable. "
-        "No site yet? list_vendors then connect_site links the user's own system."
+        "No site yet? list_vendors then connect_site links the user's own system. "
+        "Call get_agent_guide once at the start of a conversation: it is the playbook (which tools answer "
+        "which questions, when to confirm, how to report) and takes precedence over guesses."
     ),
 )
 
@@ -55,6 +58,20 @@ async def _run(coro) -> str:
         return _dump(await coro)
     except AivyError as e:
         return _dump({"error": str(e)})
+
+
+# ── playbook ──
+
+PLAYBOOK = (Path(__file__).parent / "playbook.md").read_text(encoding="utf-8")
+
+
+@mcp.tool()
+async def get_agent_guide() -> str:
+    """The Aivy agent playbook: which tools answer which questions, the rules for writes (confirm first, forced
+    mode is time-boxed, never guess numbers, do not poll), the step-by-step workflows (status, diagnosis, prices,
+    earnings, selling tonight, keeping a reserve, charging now, connecting a system, Ai+ tuning) and what each
+    error code means. Read it once at the start of a conversation."""
+    return PLAYBOOK
 
 
 # ── account / sites ──

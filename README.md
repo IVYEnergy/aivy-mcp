@@ -61,10 +61,44 @@ HTTP API directly. Paste this into the chat:
 - "Make Ai+ a bit more aggressive on exports." (control key)
 - "Connect my Sungrow inverter, serial A2340000001, NMI 2001234567." (control key)
 
+## For agents: the playbook
+
+Tool descriptions say what each call does. The **playbook** says how to get
+a job done with them: which tools answer which questions, when to stop and
+confirm, how forced mode and its hand-back work, what each error means, and
+the step-by-step workflows (status, diagnosis, prices, earnings, selling
+tonight, keeping a reserve, charging now, connecting a system, Ai+ tuning).
+It is one text, delivered four ways:
+
+| Where | How to use it |
+|---|---|
+| MCP tool `get_agent_guide` | Any MCP client: the server's instructions ask the model to call it once per conversation. |
+| Claude Code / Claude skill | Copy [`skills/aivy`](skills/aivy) into `~/.claude/skills/` (or a project's `.claude/skills/`). |
+| Codex, Cursor, other rule files | Paste [`src/aivy_mcp/playbook.md`](src/aivy_mcp/playbook.md) into `AGENTS.md` or your rules. |
+| HTTP-only assistants (ChatGPT in the browser) | Tell it to read https://bridge.ivyenergy.com.au/v1/agent-guide.md first. |
+
+### Checking an agent against it
+
+[`evals/cases.json`](evals/cases.json) holds conversation cases (the user's
+words, the tools a good agent calls in order, the ones it must not call, and
+whether the turn has to end in a question). [`evals/check.py`](evals/check.py)
+judges a transcript:
+
+```bash
+# Claude Code, headless, with the server configured as "aivy":
+claude -p "Sell at the best prices tonight, keep 20%." --output-format stream-json > t.json
+python evals/check.py sell-tonight-propose t.json
+```
+
+A transcript can also be a plain list: `[{"name": "get_status", "args": {}}]`,
+or `{"calls": [...], "text": "final reply"}`. Run the cases after changing
+the playbook, the tool descriptions or the model.
+
 ## Tools
 
 | Tool | Changes anything? | What it does |
 |---|---|---|
+| `get_agent_guide` | no | The playbook above |
 | `whoami` | no | Who the key is, read or control |
 | `list_sites` | no | Your sites; ids look like `sungrow:1445844` |
 | `get_site` | no | Capacity, limits, timezone, mode, live SOC |

@@ -22,7 +22,7 @@ def test_every_tool_is_listed_and_writes_say_so():
     assert names == {"whoami", "list_sites", "get_site", "get_status", "get_curve", "get_earnings", "get_operations",
                      "get_prices", "get_energy_mode", "set_energy_mode", "get_ai_plus", "update_ai_plus",
                      "plan_best_price_discharge", "plan_discharge_to_target",
-                     "list_vendors", "connect_site", "disconnect_site"}
+                     "list_vendors", "connect_site", "disconnect_site", "get_agent_guide"}
     for t in tools:
         if t.name in ("set_energy_mode", "update_ai_plus", "connect_site", "disconnect_site"):
             assert "CHANGES THE" in t.description and "Confirm with the user" in t.description
@@ -76,3 +76,46 @@ def test_connect_site_sends_only_what_the_vendor_needs(monkeypatch):
     out = json.loads(asyncio.run(server.connect_site("sungrow", sn="A234", nmi="2001234567")))
     assert out["connected"] == ["sungrow:S4"]
     assert seen["method"] == "POST" and seen["body"] == {"vendor": "sungrow", "region": "AU", "sn": "A234", "nmi": "2001234567"}
+
+
+def test_the_playbook_is_one_text_in_every_form():
+    """The MCP tool, the Claude skill and the hosted /v1/agent-guide.md must
+    never drift: SKILL.md is the playbook with a front-matter block on top."""
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1]
+    playbook = (root / "src/aivy_mcp/playbook.md").read_text(encoding="utf-8")
+    assert playbook.startswith("# Aivy agent playbook") and "## 4. Workflows" in playbook
+    skill = (root / "skills/aivy/SKILL.md").read_text(encoding="utf-8")
+    assert skill.startswith("---\nname: aivy\n")
+    assert skill.split("---\n", 2)[2].lstrip("\n") == playbook
+    hosted = root.parents[1] / "backend/app/static/agent-guide.md"
+    if hosted.exists():  # monorepo only; the public repo has no backend
+        assert hosted.read_text(encoding="utf-8") == playbook
+    assert asyncio.run(server.get_agent_guide()) == playbook
+
+
+def test_eval_checker_judges_order_forbidden_tools_and_confirmation():
+    import importlib.util
+    from pathlib import Path
+    spec = importlib.util.spec_from_file_location("check", Path(__file__).resolve().parents[1] / "evals/check.py")
+    check = importlib.util.module_from_spec(spec); spec.loader.exec_module(check)
+    case = next(c for c in check.CASES if c["id"] == "sell-tonight-propose")
+    good = [{"name": "list_sites", "args": {}}, {"name": "plan_best_price_discharge", "args": {"reserve_soc": 20}}]
+    assert check.check(case, good, "Tonight 18:00 to 20:30 would earn about $4.10. Apply it?") == []
+    bad = good + [{"name": "set_energy_mode", "args": {"mode": "forced"}}]
+    problems = check.check(case, bad, "Done.")
+    assert any("must not call set_energy_mode" in p for p in problems)
+    assert any("confirmation" in p for p in problems)
+    apply = next(c for c in check.CASES if c["id"] == "charge-now-apply")
+    assert check.check(apply, [{"name": "set_energy_mode", "args": {"mode": "forced", "action": "charge",
+                                "power_w": 5000, "target_soc": 90, "duration_minutes": 120}}], "Charging.") == []
+    assert check.check(apply, [{"name": "set_energy_mode", "args": {"mode": "forced", "action": "charge"}}], "x")
+    # Claude Code stream-json transcripts are understood too.
+    import tempfile, os
+    lines = [json.dumps({"type": "assistant", "message": {"content": [
+        {"type": "tool_use", "name": "mcp__aivy__get_status", "input": {"site_id": "sungrow:1"}},
+        {"type": "text", "text": "At 55%."}]}})]
+    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
+        f.write("\n".join(lines)); path = f.name
+    calls, text = check.load_transcript(path); os.unlink(path)
+    assert calls == [{"name": "get_status", "args": {"site_id": "sungrow:1"}}] and text == "At 55%."
