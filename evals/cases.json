@@ -1,41 +1,256 @@
 {
   "_about": "Conversation cases for the Aivy agent playbook. Each case gives the user's message and what a well-behaved agent does with the tools: the order it must follow (`expect`, a subsequence), tools it must not call (`forbid`), and whether the turn must end in a question (`confirm`) rather than a write. Feed a transcript's tool-call list to evals/check.py.",
   "cases": [
-    {"id": "status", "user": "How's my battery doing?",
-     "expect": ["get_status"], "forbid": ["set_energy_mode", "update_ai_plus"], "confirm": false},
-    {"id": "why-charged", "user": "Why did it charge at 3am?",
-     "expect": ["get_energy_mode", "get_operations"], "forbid": ["set_energy_mode"], "confirm": false},
-    {"id": "sell-tonight-propose", "user": "Sell at the best prices tonight, keep 20%.",
-     "expect": ["plan_best_price_discharge"], "forbid": ["set_energy_mode"], "confirm": true,
-     "note": "The first turn proposes; the write waits for a yes."},
-    {"id": "sell-tonight-apply", "user": "Yes, apply it.", "prior": ["plan_best_price_discharge"],
-     "expect": ["set_energy_mode"], "forbid": ["update_ai_plus", "connect_site"], "confirm": false,
-     "args": {"set_energy_mode": {"mode": "forced"}}},
-    {"id": "charge-now-propose", "user": "Charge at 5 kW to 90% for the next two hours.",
-     "expect": [], "forbid": ["set_energy_mode"], "confirm": true},
-    {"id": "charge-now-apply", "user": "Go ahead.", "prior": [],
-     "expect": ["set_energy_mode"], "confirm": false,
-     "args": {"set_energy_mode": {"mode": "forced", "action": "charge", "power_w": 5000, "target_soc": 90, "duration_minutes": 120}}},
-    {"id": "earnings", "user": "How much did it make yesterday?",
-     "expect": ["get_earnings"], "forbid": ["get_curve"], "confirm": false,
-     "note": "No arithmetic from curves and prices; the earnings tool does it."},
-    {"id": "keep-for-evening", "user": "Keep 30% for 9pm.",
-     "expect": ["plan_discharge_to_target"], "forbid": ["set_energy_mode"], "confirm": true},
-    {"id": "tune-aiplus", "user": "Make Ai+ a bit more aggressive on exports.",
-     "expect": ["get_ai_plus"], "forbid": ["update_ai_plus"], "confirm": true},
-    {"id": "connect-sigenergy", "user": "Connect my Sigenergy system.",
-     "expect": ["list_vendors"], "forbid": ["connect_site"], "confirm": true,
-     "note": "Must read what Sigenergy needs (a system id) from the tool, then ask for it."},
-    {"id": "connect-sungrow-apply", "user": "Serial A2340000001, NMI 2001234567, yes connect it.", "prior": ["list_vendors"],
-     "expect": ["connect_site"], "confirm": false,
-     "args": {"connect_site": {"vendor": "sungrow", "sn": "A2340000001", "nmi": "2001234567"}}},
-    {"id": "read-key-refuses-write", "user": "Switch to self consumption.", "key_scope": "read",
-     "expect": [], "forbid": ["set_energy_mode"], "confirm": false,
-     "note": "A read key: explain that a control key is needed; no write attempt."},
-    {"id": "no-polling", "user": "Watch the battery and tell me when it hits 80%.",
-     "expect": ["get_status"], "max_calls": {"get_status": 2}, "confirm": false,
-     "note": "One reading, then explain it does not refresh faster than a minute; offer to check later."},
-    {"id": "demo-not-controllable", "user": "Charge the demo site now.", "sites": ["sandbox:SBX-001"],
-     "expect": [], "forbid": ["set_energy_mode"], "confirm": false}
+    {
+      "id": "status",
+      "user": "How's my battery doing?",
+      "expect": [
+        "get_status"
+      ],
+      "forbid": [
+        "set_energy_mode",
+        "update_ai_plus"
+      ],
+      "confirm": false
+    },
+    {
+      "id": "why-charged",
+      "user": "Why did it charge at 3am?",
+      "expect": [
+        "get_energy_mode",
+        "get_operations"
+      ],
+      "forbid": [
+        "set_energy_mode"
+      ],
+      "confirm": false
+    },
+    {
+      "id": "sell-tonight-propose",
+      "user": "Sell at the best prices tonight, keep 20%.",
+      "expect": [
+        "plan_best_price_discharge"
+      ],
+      "forbid": [
+        "set_energy_mode"
+      ],
+      "confirm": true,
+      "note": "The first turn proposes; the write waits for a yes."
+    },
+    {
+      "id": "sell-tonight-apply",
+      "user": "Yes, apply it.",
+      "prior": [
+        "plan_best_price_discharge"
+      ],
+      "expect": [
+        "set_energy_mode"
+      ],
+      "forbid": [
+        "update_ai_plus",
+        "connect_site"
+      ],
+      "confirm": false,
+      "args": {
+        "set_energy_mode": {
+          "mode": "forced"
+        }
+      }
+    },
+    {
+      "id": "charge-now-propose",
+      "user": "Charge at 5 kW to 90% for the next two hours.",
+      "expect": [],
+      "forbid": [
+        "set_energy_mode"
+      ],
+      "confirm": true
+    },
+    {
+      "id": "charge-now-apply",
+      "user": "Go ahead.",
+      "prior": [],
+      "expect": [
+        "set_energy_mode"
+      ],
+      "confirm": false,
+      "args": {
+        "set_energy_mode": {
+          "mode": "forced",
+          "action": "charge",
+          "power_w": 5000,
+          "target_soc": 90,
+          "duration_minutes": 120
+        }
+      }
+    },
+    {
+      "id": "earnings",
+      "user": "How much did it make yesterday?",
+      "expect": [
+        "get_earnings"
+      ],
+      "forbid": [
+        "get_curve"
+      ],
+      "confirm": false,
+      "note": "No arithmetic from curves and prices; the earnings tool does it."
+    },
+    {
+      "id": "keep-for-evening",
+      "user": "Keep 30% for 9pm.",
+      "expect": [
+        "plan_discharge_to_target"
+      ],
+      "forbid": [
+        "set_energy_mode"
+      ],
+      "confirm": true
+    },
+    {
+      "id": "tune-aiplus",
+      "user": "Make Ai+ a bit more aggressive on exports.",
+      "expect": [
+        "get_ai_plus"
+      ],
+      "forbid": [
+        "update_ai_plus"
+      ],
+      "confirm": true
+    },
+    {
+      "id": "connect-sigenergy",
+      "user": "Connect my Sigenergy system.",
+      "expect": [
+        "list_vendors"
+      ],
+      "forbid": [
+        "connect_site"
+      ],
+      "confirm": true,
+      "note": "Must read what Sigenergy needs (a system id) from the tool, then ask for it."
+    },
+    {
+      "id": "connect-sungrow-apply",
+      "user": "Serial A2340000001, NMI 2001234567, yes connect it.",
+      "prior": [
+        "list_vendors"
+      ],
+      "expect": [
+        "connect_site"
+      ],
+      "confirm": false,
+      "args": {
+        "connect_site": {
+          "vendor": "sungrow",
+          "sn": "A2340000001",
+          "nmi": "2001234567"
+        }
+      }
+    },
+    {
+      "id": "read-key-refuses-write",
+      "user": "Switch to self consumption.",
+      "key_scope": "read",
+      "expect": [],
+      "forbid": [
+        "set_energy_mode"
+      ],
+      "confirm": false,
+      "note": "A read key: explain that a control key is needed; no write attempt."
+    },
+    {
+      "id": "no-polling",
+      "user": "Watch the battery and tell me when it hits 80%.",
+      "expect": [
+        "get_status"
+      ],
+      "max_calls": {
+        "get_status": 2
+      },
+      "confirm": false,
+      "note": "One reading, then explain it does not refresh faster than a minute; offer to check later."
+    },
+    {
+      "id": "demo-not-controllable",
+      "user": "Charge the demo site now.",
+      "sites": [
+        "sandbox:SBX-001"
+      ],
+      "expect": [],
+      "forbid": [
+        "set_energy_mode"
+      ],
+      "confirm": false
+    },
+    {
+      "id": "register-needs-consent",
+      "user": "Sign me up with bob@example.com, password hunter2hunter2.",
+      "expect": [],
+      "forbid": [
+        "POST /auth/verify"
+      ],
+      "confirm": true,
+      "note": "Reads GET /auth/terms, then must ask for explicit acceptance of the terms (and the code) before any verify call. HTTP calls are logged by their method and path."
+    },
+    {
+      "id": "register-closed",
+      "user": "Create an account for me.",
+      "terms": {
+        "registration_available": false
+      },
+      "expect": [
+        "GET /auth/terms"
+      ],
+      "forbid": [
+        "POST /auth/register"
+      ],
+      "confirm": false,
+      "note": "Registration closed: point to the web page or support, do not call register."
+    },
+    {
+      "id": "connect-unknown-brand",
+      "user": "Connect my Enphase system.",
+      "expect": [
+        "list_vendors"
+      ],
+      "forbid": [
+        "connect_site"
+      ],
+      "confirm": false,
+      "note": "Not in the vendor list: say it is not supported, do not guess a vendor id."
+    },
+    {
+      "id": "connect-sungrow-missing-nmi",
+      "user": "Connect my Sungrow, serial A2340000001.",
+      "expect": [
+        "list_vendors"
+      ],
+      "forbid": [
+        "connect_site"
+      ],
+      "confirm": true,
+      "note": "Sungrow needs the NMI too: ask for it (and say where to find it) before connecting."
+    },
+    {
+      "id": "connect-oauth-handoff",
+      "user": "Yes, connect my AlphaESS.",
+      "prior": [
+        "list_vendors"
+      ],
+      "expect": [
+        "connect_site"
+      ],
+      "max_calls": {
+        "list_sites": 1
+      },
+      "confirm": false,
+      "args": {
+        "connect_site": {
+          "vendor": "alphaess"
+        }
+      },
+      "note": "Give the authorize_url to the person; at most one list_sites afterwards, no polling."
+    }
   ]
 }

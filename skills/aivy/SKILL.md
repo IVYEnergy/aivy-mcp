@@ -34,14 +34,16 @@ timezone (on `get_site`).
 
 ## 2. Before anything else
 
-1. `whoami` [GET /me]: confirms the key works and whether it is `read` or
+1. No key at all (the tools answer 401, or the person says they have not
+   signed up)? Workflow K gets them one. Nothing else works without it.
+2. `whoami` [GET /me]: confirms the key works and whether it is `read` or
    `control`. A `read` key cannot change anything; say so when asked to.
-2. `list_sites` [GET /sites]: the site ids (`vendor:station_id`) every other
+3. `list_sites` [GET /sites]: the site ids (`vendor:station_id`) every other
    tool takes. Sites with `demo: true` (`sandbox:...`) are shared replay
    data for trying the API: readable, never controllable, and say so if you
    quote them.
-3. No sites and nothing demo? The person has not connected a system yet:
-   see workflow H.
+4. Only demo sites? The person has not connected their own system yet:
+   workflow H.
 
 Do these once per conversation, not before every question.
 
@@ -121,17 +123,46 @@ power_w: 5000, target_soc: 90, duration_minutes: 120`. Report the window
 and the hand-back time. For "stop" or "go back to normal": `set_energy_mode`
 with the previous mode (`reverts_to` from `get_energy_mode`), permanent.
 
-### H. Connecting a system
-`list_vendors` [GET /vendors] first and answer from it, never from memory
-(what each brand needs changes). Then `connect_site` [POST /sites]:
-- Sungrow, FoxESS: serial number and the site's NMI.
-- Sigenergy: the system id from the Sigenergy app.
-- AlphaESS, SolaX: the response carries `authorize_url`; give it to the
-  person to open and approve in a browser. The site appears in `list_sites`
-  within a minute; check once, do not poll.
-A site in `contested` already belongs to another account: an administrator
-sorts it out, you cannot. A brand with `available: false` cannot be
-connected on this deployment yet.
+### H. Connecting a system (step by step)
+Needs a `control` key; with a `read` key say so and stop.
+
+1. **Find out what they have.** Ask the brand of the inverter or battery if
+   you do not know it. Then `list_vendors` [GET /vendors] and answer from
+   it, never from memory: what each brand needs changes. A brand with
+   `available: false` cannot be connected on this deployment yet; say so
+   and stop. A brand not in the list is not supported.
+2. **Collect exactly what `connect` asks for**, and tell the person where to
+   find it:
+   - Sungrow, FoxESS (`fields: sn, nmi`): the inverter serial number (on
+     the inverter label or in the vendor app) and the site's NMI (on the
+     electricity bill, 10 or 11 characters).
+   - Sigenergy (`fields: system_id`): the system id from the Sigenergy app.
+   - Other serial vendors (`fields: sn`): the serial number.
+   - AlphaESS, SolaX (`method: oauth`): nothing to collect; the person will
+     sign in at the vendor.
+   Do not guess or pad a serial number or NMI.
+3. **Restate and confirm.** "Connect the Sungrow inverter A2340000001 at NMI
+   2001234567 to your account?" Wait for the yes.
+4. **`connect_site`** [POST /sites].
+   - Serial vendors: the response has `connected` (new site ids, now yours)
+     and `contested` (already held by another account; an administrator
+     sorts that out, you cannot). A `warning` means the vendor accepted but
+     the grant failed: ask them to contact support with the serial. A 409
+     means the vendor refused; relay the message (wrong serial, device
+     already registered elsewhere) and ask them to check the details.
+   - OAuth vendors: the response has `authorize_url` (valid 15 minutes).
+     Give it to the person to open in a browser, sign in at the vendor and
+     approve Aivy. After they say it is done, `list_sites` once; the site
+     appears within a minute. If it does not, ask whether the vendor page
+     showed an error, and offer a fresh `connect_site` for a new link.
+5. **Show it works.** `get_site` on the new id: name, capacity, SOC. Live
+   readings follow once the vendor cloud answers, usually within a minute.
+6. **Prices need Amber.** `get_prices` answers 409 until the person links
+   their Amber Electric account, which is done in the Aivy app (site →
+   Amber), not through this API. Say so when prices or Ai+ come up.
+
+`disconnect_site` [DELETE /sites/{id}] removes a site from the account after
+a yes; the vendor-side link and history stay. Demo sites cannot be removed.
 
 ### I. Ai+ tuning: "charge more aggressively", "stop selling so low"
 `get_ai_plus` [GET /sites/{id}/ai-plus] first: it names the engine variant
@@ -144,6 +175,46 @@ range; nothing was changed.
 Use the `demo` sites for every read workflow and say they are demos.
 Control requests on them are refused by the server; explain that their own
 system, once connected (H), is controllable.
+
+### K. No account or key yet (registration)
+The MCP tools need a key to start, so this workflow is HTTP calls (or the
+web), and it is the only place a password is involved. Rules: never invent
+or store a password; never type the key into logs, files or later
+messages; the terms are accepted by the person, not by you.
+
+**Preferred: the web.** Send the person to
+https://bridge.ivyenergy.com.au/developer. They sign up (or sign in), create
+a key (read only, or read and control) and paste it back. Nothing else to
+do: the same account works in the Aivy app.
+
+**From the API** (when the person asks you to do it for them):
+
+1. `GET /auth/terms`. If `registration_available` is false, registration is
+   closed for now; send them to the web page or support and stop. Otherwise
+   show the terms link (`web`) and the document versions.
+2. Ask for the email address they want on the account and let them choose
+   a password (at least 8 characters). Ask whether they accept the terms of
+   use and privacy policy. Do not continue without an explicit yes.
+3. `POST /auth/register` with `identifier`, `password`, `display_name`. The
+   response has `registration_id` and `registration_session` (keep them for
+   the next call; they expire in 30 minutes) and says a code was sent. The
+   response is the same whether or not the address already has an account,
+   so a missing email means: check spam, or sign in instead.
+4. Ask the person for the code from the email (or SMS).
+5. `POST /auth/verify` with `registration_id`, `registration_session`,
+   `code`, `accept_terms: true` (only because they said yes in step 2),
+   `key_name` (say what will use it, e.g. "Claude Code") and `scope`
+   (`read` unless they asked for control). The response carries `api_key`,
+   shown once. 409 means a wrong code (ask again; five attempts) or an
+   expired session (start over at step 3).
+6. Hand the key over once, tell them it will not be shown again and that
+   it can be revoked at bridge.ivyenergy.com.au/developer, then continue
+   with section 2 using it. Every new key lists the demo sites, so they can
+   try things before connecting hardware (H).
+
+**Already has an account, wants a key:** `POST /keys` with HTTP Basic
+(`username:password`) and `{"name", "scope"}`. Keys cannot create keys, so
+this needs the password; prefer the web page unless they ask.
 
 ## 5. Errors
 
