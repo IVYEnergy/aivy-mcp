@@ -86,6 +86,22 @@ class AivyClient:
     async def disconnect_site(self, site_id: str) -> dict:
         return await self._call("DELETE", f"/sites/{site_id}")
 
+    # ── alerts ──
+    async def alerts(self, site_id: str) -> dict:
+        return await self._call("GET", f"/sites/{site_id}/alerts")
+
+    async def create_alert(self, site_id: str, body: dict) -> dict:
+        return await self._call("POST", f"/sites/{site_id}/alerts", json=body)
+
+    async def delete_alert(self, site_id: str, rule_id: int) -> dict:
+        return await self._call("DELETE", f"/sites/{site_id}/alerts/{rule_id}")
+
+    async def alert_events(self, site_id: str, limit: int = 50) -> dict:
+        return await self._call("GET", f"/sites/{site_id}/alerts/events", params={"limit": limit})
+
+    async def test_alert_email(self) -> dict:
+        return await self._call("POST", "/alerts/test-email")
+
     # ── control ──
     async def energy_mode(self, site_id: str) -> dict:
         return await self._call("GET", f"/sites/{site_id}/energy-mode")

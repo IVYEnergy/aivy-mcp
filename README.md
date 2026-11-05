@@ -60,6 +60,7 @@ HTTP API directly. Paste this into the chat:
 - "Charge at 5 kW to 90% for the next two hours." (control key)
 - "Make Ai+ a bit more aggressive on exports." (control key)
 - "Connect my Sungrow inverter, serial A2340000001, NMI 2001234567." (control key)
+- "Email me when the battery drops below 20%."
 
 ## For agents: the playbook
 
@@ -107,6 +108,9 @@ the playbook, the tool descriptions or the model.
 | `get_earnings` | no | A day's energy, priced at Amber's actual prices |
 | `get_operations` | no | What the platform did and why |
 | `get_prices` | no | Amber prices now and forecast |
+| `list_alerts`, `get_alert_events` | no | Alert rules on a site and what fired |
+| `create_alert`, `delete_alert` | account only | Threshold alerts to inbox, push and email; never control the battery |
+| `send_test_alert_email` | no | One test alert to the account's email |
 | `list_vendors` | no | Supported brands and what connecting one needs |
 | `connect_site` | **yes** | Link the user's system (serial + NMI, system id, or an OAuth link to open) |
 | `disconnect_site` | **yes** | Remove a site from the account |

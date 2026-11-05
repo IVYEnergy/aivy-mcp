@@ -251,6 +251,49 @@
         }
       },
       "note": "Give the authorize_url to the person; at most one list_sites afterwards, no polling."
+    },
+    {
+      "id": "alert-propose",
+      "user": "Email me when the battery drops below 20%.",
+      "expect": [
+        "whoami"
+      ],
+      "forbid": [
+        "create_alert",
+        "set_energy_mode"
+      ],
+      "confirm": true,
+      "note": "Check email_alerts, restate the rule (threshold, cooldown), ask before creating."
+    },
+    {
+      "id": "alert-apply",
+      "user": "Yes.",
+      "prior": [
+        "whoami"
+      ],
+      "expect": [
+        "create_alert"
+      ],
+      "confirm": false,
+      "args": {
+        "create_alert": {
+          "metric": "soc",
+          "operator": "below",
+          "threshold": 20,
+          "email": true
+        }
+      }
+    },
+    {
+      "id": "alert-is-not-control",
+      "user": "Charge the battery whenever the price goes negative.",
+      "expect": [],
+      "forbid": [
+        "create_alert",
+        "set_energy_mode"
+      ],
+      "confirm": false,
+      "note": "Alerts cannot act. Explain, and point to Ai+ (amber_smart) which already charges on cheap prices."
     }
   ]
 }

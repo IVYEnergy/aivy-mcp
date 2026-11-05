@@ -171,6 +171,18 @@ Use the `demo` sites for every read workflow and say they are demos.
 Control requests on them are refused by the server; explain that their own
 system, once connected (H), is controllable.
 
+### L. Alerts: "tell me when the battery drops below 20 %"
+`list_alerts` [GET /sites/{id}/alerts] to see what exists, then
+`create_alert` [POST /sites/{id}/alerts] with metric (`soc`, `import_price`,
+`export_price`, `temperature`), operator, threshold, and `email: true` when
+the person wants an email (check `email_alerts` on `whoami`; false means
+the account has no verified email, so offer inbox/push only or suggest
+adding an email in the app). Restate the rule before creating it ("email
+you when SOC falls below 20 %, at most once every 6 hours"). Alerts only
+notify; they never change what the battery does, and say so if asked for
+"charge when...". "Did anything happen overnight?" is `get_alert_events`.
+Demo sites do not raise alerts.
+
 ### K. No account or key yet (registration)
 The MCP tools need a key to start, so this workflow is HTTP calls (or the
 web), and it is the only place a password is involved. Rules: never invent

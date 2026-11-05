@@ -171,6 +171,50 @@ async def disconnect_site(site_id: str) -> str:
     return await _run(_c().disconnect_site(site_id))
 
 
+# ── alerts ──
+
+@mcp.tool()
+async def list_alerts(site_id: str) -> str:
+    """The account's alert rules on a site: what each watches (soc %, import/export price c/kWh, forecast
+    temperature °C), above/below which threshold, whether it emails, and when it last fired."""
+    return await _run(_c().alerts(site_id))
+
+
+@mcp.tool()
+async def create_alert(site_id: str, name: str, metric: str, operator: str, threshold: float,
+                       email: bool = False, cooldown_minutes: int = 360, message: str = "",
+                       active_start: str = "00:00", active_end: str = "00:00", locale: str = "en") -> str:
+    """Set up a threshold alert: metric soc | import_price | export_price | temperature, operator above | below.
+    Every firing goes to the app inbox (and the phone when the app is installed); email=True also mails the
+    account's verified address (whoami.email_alerts says whether that works). Quiet for cooldown_minutes after
+    each firing (min 15). An alert only tells the person something; it never changes what the battery does.
+    Confirm the rule with the user before creating it."""
+    body: dict[str, Any] = {"name": name, "metric": metric, "operator": operator, "threshold": threshold,
+                            "email": email, "cooldown_minutes": cooldown_minutes, "message": message,
+                            "active_start": active_start, "active_end": active_end, "locale": locale}
+    return await _run(_c().create_alert(site_id, body))
+
+
+@mcp.tool()
+async def delete_alert(site_id: str, rule_id: int) -> str:
+    """Retire an alert rule (past firings stay in the inbox). Confirm with the user first."""
+    return await _run(_c().delete_alert(site_id, rule_id))
+
+
+@mcp.tool()
+async def get_alert_events(site_id: str, limit: int = 20) -> str:
+    """What fired on the site, newest first: the rule, the value that tripped it, when, how it was delivered and
+    whether it was emailed. Use for 'did anything happen overnight?'."""
+    return await _run(_c().alert_events(site_id, limit))
+
+
+@mcp.tool()
+async def send_test_alert_email() -> str:
+    """Send one test alert email to the account's verified address so the person sees what an alert looks like.
+    409 when the account has no verified email."""
+    return await _run(_c().test_alert_email())
+
+
 # ── control ──
 
 @mcp.tool()

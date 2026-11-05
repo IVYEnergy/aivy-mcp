@@ -22,7 +22,8 @@ def test_every_tool_is_listed_and_writes_say_so():
     assert names == {"whoami", "list_sites", "get_site", "get_status", "get_curve", "get_earnings", "get_operations",
                      "get_prices", "get_energy_mode", "set_energy_mode", "get_ai_plus", "update_ai_plus",
                      "plan_best_price_discharge", "plan_discharge_to_target",
-                     "list_vendors", "connect_site", "disconnect_site", "get_agent_guide"}
+                     "list_vendors", "connect_site", "disconnect_site", "get_agent_guide",
+                     "list_alerts", "create_alert", "delete_alert", "get_alert_events", "send_test_alert_email"}
     for t in tools:
         if t.name in ("set_energy_mode", "update_ai_plus", "connect_site", "disconnect_site"):
             assert "CHANGES THE" in t.description and "Confirm with the user" in t.description
