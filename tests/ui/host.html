@@ -18,7 +18,13 @@ window.addEventListener('message', async (ev) => {
   if (m.method === 'ui/initialize') reply(m.id, { protocolVersion: '2026-01-26', hostInfo: { name: 'test-host' }, hostCapabilities: {}, hostContext: { theme } });
   else if (m.method === 'ui/notifications/initialized') f.contentWindow.postMessage({ jsonrpc: '2.0', method: 'ui/notifications/tool-result', params: { content: [{ type: 'text', text: JSON.stringify(window.SAMPLE) }], structuredContent: window.SAMPLE } }, '*');
   else if (m.method === 'ui/notifications/size-changed') f.style.height = Math.min(1200, m.params.height + 2) + 'px';
-  else if (m.method === 'tools/call') { window.calls.push(m.params); reply(m.id, { content: [{ type: 'text', text: JSON.stringify({ ok: true, energy_mode: 'forced', reverts_at: new Date(Date.now() + 3600e3).toISOString() }) }] }); }
+  else if (m.method === 'tools/call') {
+    window.calls.push(m.params);
+    const replies = { register_account: { registration_id: 'r1', registration_session: 's1', status: 'pending_email' },
+                      verify_registration: { username: 'bob@example.com', key_saved: '~/.aivy/credentials.json' },
+                      sign_in: { id: 3, scope: 'control' } };
+    reply(m.id, { content: [{ type: 'text', text: JSON.stringify(replies[m.params.name] || { ok: true, energy_mode: 'forced', reverts_at: new Date(Date.now() + 3600e3).toISOString() }) }] });
+  }
   else if (m.method === 'ui/open-link') reply(m.id, {});
 });
 fetch(q.get('card') + '.html').then(r => r.text()).then(html => {
@@ -26,6 +32,7 @@ fetch(q.get('card') + '.html').then(r => r.text()).then(html => {
   f.srcdoc = html;
 });
 const SAMPLES = {
+  signup: { registration_available: true, version: 'aivy-registration-2026-10-20', web: 'https://bridge.ivyenergy.com.au/terms' },
   status: { id: 'sungrow:1445844', name: 'Home', at: new Date().toISOString(), soc_pct: 72.5, pv_w: 4213, load_w: 1180, grid_w: 1533, battery_w: 1500, source: 'vendor' },
   plan: { site_id: 'sungrow:1445844', soc_now: 86.0, reserve_soc: 20, capacity_kwh: 12.8, current_mode: 'amber_smart', timezone: 'Australia/Adelaide', window_start: '16:30', window_end: '22:00',
           intervals: [{ date: '2026-11-06', start: '17:30', end: '18:00', sell_c: 48.2, kwh: 2.5, power_w: 5000 }, { date: '2026-11-06', start: '18:00', end: '18:30', sell_c: 66.9, kwh: 2.5, power_w: 5000 }, { date: '2026-11-06', start: '18:30', end: '19:00', sell_c: 41.0, kwh: 1.8, power_w: 3600 }],

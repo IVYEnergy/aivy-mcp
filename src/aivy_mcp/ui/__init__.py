@@ -15,6 +15,7 @@ UI_URIS_BY_NAME = {
     "status": "ui://aivy/status.html",
     "plan": "ui://aivy/plan.html",
     "prices": "ui://aivy/prices.html",
+    "signup": "ui://aivy/signup.html",
 }
 UI_URIS = {uri: name for name, uri in UI_URIS_BY_NAME.items()}
 

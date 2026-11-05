@@ -98,14 +98,20 @@ async def _run(coro) -> str:
 
 # ── account: register or sign in from the chat (no key needed) ──
 
-@_tool()
-async def get_registration_terms(locale: str = "en") -> str:
+@ui_tool(UI_URIS_BY_NAME["signup"], invoking="Opening Aivy sign-up", invoked="Aivy sign-up")
+async def get_registration_terms(locale: str = "en") -> dict[str, Any]:
     """Whether sign-up is open and the terms of use / privacy policy a new account accepts (version, hash and
-    a link). Show the link to the person and ask whether they accept BEFORE register_account."""
-    return await _run(_c().terms(locale))
+    a link). Show the link to the person and ask whether they accept BEFORE register_account. Hosts that
+    support cards render a sign-up / sign-in form here instead: the person types email and password into the
+    card, which calls register_account / verify_registration / sign_in itself, so nothing passes through the
+    chat. When the card is shown, wait for the person to say they are done."""
+    try:
+        return await _c().terms(locale)
+    except AivyError as e:
+        return {"error": str(e)}
 
 
-@_tool()
+@_tool(meta={"openai/widgetAccessible": True})
 async def register_account(email: str, password: str, display_name: str | None = None, locale: str = "en") -> str:
     """Create an Aivy account from the chat, step 1 of 2: a verification code is emailed to `email`. Needs no API
     key. Ask the person to choose the password (8+ characters; it is also their Aivy app password); do not invent
@@ -117,7 +123,7 @@ async def register_account(email: str, password: str, display_name: str | None =
     return await _run(_c().register(body))
 
 
-@_tool()
+@_tool(meta={"openai/widgetAccessible": True})
 async def verify_registration(registration_id: str, registration_session: str, code: str, accept_terms: bool,
                               key_name: str = "chat", scope: str = "read") -> str:
     """Create an Aivy account from the chat, step 2 of 2: confirms the emailed code, accepts the terms (only pass
@@ -142,7 +148,7 @@ async def verify_registration(registration_id: str, registration_session: str, c
     return _dump(out)
 
 
-@_tool()
+@_tool(meta={"openai/widgetAccessible": True})
 async def sign_in(username: str, password: str, key_name: str = "chat", scope: str = "read") -> str:
     """Use an existing Aivy account from the chat: creates an API key with the account's username (or email)
     and password, stores it on this computer (~/.aivy/credentials.json) and uses it from now on. Needs no

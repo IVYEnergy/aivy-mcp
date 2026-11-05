@@ -136,6 +136,7 @@ of text, in the same style as the Aivy mobile app, light and dark:
 | `get_status` | SOC ring and the four power flows (solar, home, grid, battery) |
 | `get_prices` | Buying / selling now, the next hours as bars, the best hours to sell highlighted |
 | `plan_best_price_discharge` | Revenue headline, the chosen windows on a timeline and an **Apply** button; the click is the user's yes and calls `set_energy_mode` |
+| `get_registration_terms` | A sign-up / sign-in form: email, password, permission level and the terms are entered in the card and sent to Aivy by the card itself, never through the chat |
 
 Every card is one self-contained HTML document (no network, no assets), so
 it works under the extension's default content security policy. Hosts

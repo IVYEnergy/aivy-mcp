@@ -94,7 +94,7 @@ def test_registration_in_the_chat_stores_the_key_locally_and_uses_it(monkeypatch
     c = client_mod.AivyClient(api_key=None, api_url="https://example.test/v1")
     c._http = httpx.AsyncClient(base_url="https://example.test/v1", transport=httpx.MockTransport(handler))
     monkeypatch.setattr(server, "_client", c)
-    terms = json.loads(asyncio.run(server.get_registration_terms()))
+    terms = asyncio.run(server.get_registration_terms())  # a card tool: structured dict
     assert terms["registration_available"] is True
     reg = json.loads(asyncio.run(server.register_account("bob@example.com", "a long private phrase", "Bob")))
     assert reg["registration_id"] == "r1"
@@ -211,7 +211,9 @@ def test_cards_are_registered_as_mcp_apps_resources_and_linked_to_their_tools():
         html = render_template(name)
         assert html.startswith("<!doctype html>") and "window.AivyBridge" in html and "--brand:" in html
         assert "/*BRIDGE_JS*/" not in html and "/*BASE_CSS*/" not in html
-        assert "http://" not in html.replace("http://www.w3.org/2000/svg", "") and "https://" not in html, "no external assets"
+        # Links to our site are fine; loading anything from the network is not (default CSP blocks it).
+        assert "<script src=" not in html and "<link " not in html and 'src="http' not in html and "url(http" not in html, \
+            "no external assets"
 
 
 def test_status_card_data_carries_the_site_name_when_known(monkeypatch):

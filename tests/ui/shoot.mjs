@@ -11,13 +11,13 @@ const here = dirname(fileURLToPath(import.meta.url));
 const out = process.argv[2] || here;
 // Rendered templates come from the package loader, so the test sees exactly what a host gets.
 const rendered = {};
-for (const name of ["status", "plan", "prices"]) {
+for (const name of ["status", "plan", "prices", "signup"]) {
   rendered[name] = execFileSync("python3", ["-c", `import sys; sys.path.insert(0, ${JSON.stringify(join(here, "../../src"))}); from aivy_mcp.ui import render_template; print(render_template(${JSON.stringify(name)}))`]).toString();
 }
 const server = createServer((req, res) => {
   const url = new URL(req.url, "http://x");
   if (url.pathname === "/host.html") { res.setHeader("content-type", "text/html"); return res.end(readFileSync(join(here, "host.html"))); }
-  const m = /^\/(status|plan|prices)\.html$/.exec(url.pathname);
+  const m = /^\/(status|plan|prices|signup)\.html$/.exec(url.pathname);
   if (m) { res.setHeader("content-type", "text/html"); return res.end(rendered[m[1]]); }
   res.statusCode = 404; res.end();
 });
@@ -25,7 +25,7 @@ await new Promise((r) => server.listen(0, "127.0.0.1", r));
 const port = server.address().port;
 const browser = await chromium.launch();
 for (const theme of ["light", "dark"]) {
-  for (const card of ["status", "plan", "prices"]) {
+  for (const card of ["status", "plan", "prices", "signup"]) {
     const page = await browser.newPage({ viewport: { width: 640, height: 800 } });
     const errors = [];
     page.on("pageerror", (e) => errors.push(String(e)));
@@ -35,6 +35,15 @@ for (const theme of ["light", "dark"]) {
     await page.waitForTimeout(900);
     const h = await page.evaluate(() => document.getElementById("f").style.height);
     let calls = 0;
+    if (card === "signup") {
+      await page.screenshot({ path: join(out, `card-signup-form-${theme}.png`) });
+      const frame = page.frames().find((fr) => fr !== page.mainFrame());
+      await frame.fill("#email", "bob@example.com"); await frame.fill("#pw", "a long private phrase"); await frame.check("#accept");
+      await frame.click("#go"); await page.waitForTimeout(300);
+      await frame.fill("#code", "246810"); await frame.click("#confirm"); await page.waitForTimeout(300);
+      const names = await page.evaluate(() => window.calls.map((c) => c.name + ":" + Object.keys(c.arguments).join(",")));
+      console.log(`signup flow -> ${names.join(" | ")} | shown: ${await frame.locator("#done .big").innerText()}`);
+    }
     if (card === "plan") {
       const frame = page.frames().find((fr) => fr !== page.mainFrame());
       await frame.click("#apply");

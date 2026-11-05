@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aivy sign up</title>
+<style>/*BASE_CSS*/
+.tabs { display: flex; gap: 6px; margin: 4px 0 12px; }
+.tab { flex: 1; text-align: center; padding: 8px 10px; border-radius: 10px; background: var(--fill); color: var(--text2); font-weight: 600; cursor: pointer; font-size: 13px; }
+.tab.on { background: var(--brand-light); color: var(--brand); }
+label { display: block; font-size: 12px; color: var(--text3); margin: 10px 0 4px; }
+input[type=text], input[type=email], input[type=password] { width: 100%; font: inherit; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--text); outline: none; }
+input:focus { border-color: var(--brand); }
+.row { display: flex; gap: 10px; align-items: center; }
+.row > * { flex: 1; }
+.radio { display: flex; gap: 8px; }
+.radio label { flex: 1; margin: 0; padding: 9px 10px; border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-size: 13px; cursor: pointer; display: flex; gap: 8px; align-items: center; }
+.radio input { margin: 0; }
+.radio small { display: block; color: var(--text3); font-size: 11px; }
+.terms { display: flex; gap: 8px; align-items: flex-start; margin: 12px 0 4px; font-size: 13px; color: var(--text2); }
+.terms input { margin-top: 3px; }
+.terms a { color: var(--brand); }
+.actions { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
+.state { font-size: 12px; color: var(--text2); } .state.ok { color: var(--brand); } .state.bad { color: var(--danger); }
+.done { text-align: center; padding: 12px 0 4px; }
+.done .big { font-size: 20px; font-weight: 700; color: var(--brand); margin-bottom: 6px; }
+.code { font-family: SFMono-Regular, Menlo, Consolas, monospace; font-size: 22px; letter-spacing: 6px; text-align: center; }
+.hint { font-size: 12px; color: var(--text3); margin-top: 6px; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="card-head">
+    <div class="mark"><svg viewBox="0 0 24 24"><path d="M20 21a8 8 0 0 0-16 0"/><circle cx="12" cy="8" r="4"/></svg></div>
+    <div><div class="title" id="title">Connect your Aivy account</div><div class="sub">Nothing here goes through the chat; it is sent to Aivy directly.</div></div>
+  </div>
+  <div class="card-body">
+    <div class="empty" id="empty">Checking…</div>
+    <div id="form" hidden>
+      <div class="tabs"><div class="tab on" id="tab-new">Create an account</div><div class="tab" id="tab-in">Sign in</div></div>
+      <div id="pane-new">
+        <label>Email</label><input type="email" id="email" placeholder="you@example.com" autocomplete="email">
+        <div class="row">
+          <div><label>Password (8+ characters)</label><input type="password" id="pw" autocomplete="new-password"></div>
+          <div><label>Name (optional)</label><input type="text" id="name" autocomplete="name"></div>
+        </div>
+      </div>
+      <div id="pane-in" hidden>
+        <label>Username or email</label><input type="text" id="user" autocomplete="username">
+        <label>Password</label><input type="password" id="pw2" autocomplete="current-password">
+      </div>
+      <label>What the assistant may do</label>
+      <div class="radio">
+        <label><input type="radio" name="scope" value="read" checked><span>Read only<small>status, prices, plans</small></span></label>
+        <label><input type="radio" name="scope" value="control"><span>Read and control<small>modes, Ai+, alerts, connect</small></span></label>
+      </div>
+      <div class="terms" id="terms-row"><input type="checkbox" id="accept"><span>I accept the <a id="terms-link" href="https://bridge.ivyenergy.com.au/terms" target="_blank">terms of use and privacy policy</a><span id="terms-ver"></span></span></div>
+      <div class="actions"><button class="btn" id="go">Create account</button><span class="state" id="state"></span></div>
+    </div>
+    <div id="verify" hidden>
+      <p>We emailed a 6-digit code to <b id="sent-to"></b>. Enter it here (check spam if it does not arrive; an address that already has an account gets no code, so use Sign in).</p>
+      <input type="text" id="code" class="code" inputmode="numeric" maxlength="8" placeholder="······">
+      <div class="actions"><button class="btn" id="confirm">Confirm</button><button class="btn ghost" id="back">Back</button><span class="state" id="state2"></span></div>
+    </div>
+    <div id="done" class="done" hidden>
+      <div class="big">You're connected</div>
+      <div id="done-msg"></div>
+      <div class="hint">The key is saved on this computer, never shown here. Manage it at bridge.ivyenergy.com.au/account.</div>
+    </div>
+  </div>
+  <div class="card-foot"><span>Aivy by Ivy Energy</span><span class="spacer"></span><a id="web" href="https://bridge.ivyenergy.com.au/developer" target="_blank" style="color:inherit">Prefer the web page?</a></div>
+</div>
+<script>/*BRIDGE_JS*/</script>
+<script>
+(function () {
+  var B = window.AivyBridge, $ = function (id) { return document.getElementById(id); };
+  var mode = 'new', pending = null, scope = function () { return document.querySelector('input[name=scope]:checked').value; };
+  function parse(res) { var out = res; if (res && res.content && res.content[0] && res.content[0].text) { try { out = JSON.parse(res.content[0].text); } catch (e) {} } if (out && out.structuredContent) out = out.structuredContent; return out || {}; }
+  function setMode(m) { mode = m; $('tab-new').className = 'tab' + (m === 'new' ? ' on' : ''); $('tab-in').className = 'tab' + (m === 'in' ? ' on' : ''); $('pane-new').hidden = m !== 'new'; $('pane-in').hidden = m !== 'in'; $('terms-row').hidden = m !== 'new'; $('go').textContent = m === 'new' ? 'Create account' : 'Sign in'; }
+  $('tab-new').onclick = function () { setMode('new'); }; $('tab-in').onclick = function () { setMode('in'); };
+  $('web').onclick = function (e) { e.preventDefault(); B.openLink('https://bridge.ivyenergy.com.au/developer'); };
+  $('terms-link').onclick = function (e) { e.preventDefault(); B.openLink($('terms-link').href); };
+  B.onData(function (d) {
+    if (d.error) { $('empty').innerHTML = '<span class="err">' + B.esc(d.error) + '</span>'; return; }
+    if (d.registration_available === false) { setMode('in'); $('tab-new').style.display = 'none'; }
+    if (d.web) $('terms-link').href = d.web;
+    if (d.version) $('terms-ver').textContent = ' (' + d.version + ')';
+    $('empty').hidden = true; $('form').hidden = false; B.resize();
+  });
+  $('go').onclick = function () {
+    var state = $('state'), btn = $('go'); state.className = 'state';
+    if (mode === 'new') {
+      var email = $('email').value.trim(), pw = $('pw').value;
+      if (!email || email.indexOf('@') < 0) { state.className = 'state bad'; state.textContent = 'Enter your email address.'; return; }
+      if (pw.length < 8) { state.className = 'state bad'; state.textContent = 'Password needs 8 or more characters.'; return; }
+      if (!$('accept').checked) { state.className = 'state bad'; state.textContent = 'Please accept the terms first.'; return; }
+      btn.disabled = true; state.textContent = 'Sending the code…';
+      B.callTool('register_account', { email: email, password: pw, display_name: $('name').value.trim() || null })
+        .then(function (res) {
+          var out = parse(res); btn.disabled = false;
+          if (out.error) { state.className = 'state bad'; state.textContent = out.error; return; }
+          pending = { id: out.registration_id, session: out.registration_session, email: email };
+          $('sent-to').textContent = email; $('form').hidden = true; $('verify').hidden = false; $('code').focus(); B.resize();
+        }).catch(function (e) { btn.disabled = false; state.className = 'state bad'; state.textContent = (e && e.message) || 'Could not start'; });
+    } else {
+      var user = $('user').value.trim(), pw2 = $('pw2').value;
+      if (!user || !pw2) { state.className = 'state bad'; state.textContent = 'Enter your username and password.'; return; }
+      btn.disabled = true; state.textContent = 'Signing in…';
+      B.callTool('sign_in', { username: user, password: pw2, key_name: 'chat', scope: scope() })
+        .then(function (res) {
+          var out = parse(res); btn.disabled = false;
+          if (out.error) { state.className = 'state bad'; state.textContent = out.error; return; }
+          finish('Signed in as ' + B.esc(user) + '.');
+        }).catch(function (e) { btn.disabled = false; state.className = 'state bad'; state.textContent = (e && e.message) || 'Could not sign in'; });
+    }
+  };
+  $('confirm').onclick = function () {
+    var state = $('state2'), btn = $('confirm'), code = $('code').value.trim();
+    if (code.length < 4) { state.className = 'state bad'; state.textContent = 'Enter the code from the email.'; return; }
+    btn.disabled = true; state.className = 'state'; state.textContent = 'Confirming…';
+    B.callTool('verify_registration', { registration_id: pending.id, registration_session: pending.session, code: code, accept_terms: true, key_name: 'chat', scope: scope() })
+      .then(function (res) {
+        var out = parse(res); btn.disabled = false;
+        if (out.error) { state.className = 'state bad'; state.textContent = out.error; return; }
+        finish('Account ' + B.esc(out.username || pending.email) + ' is ready.');
+      }).catch(function (e) { btn.disabled = false; state.className = 'state bad'; state.textContent = (e && e.message) || 'Could not confirm'; });
+  };
+  $('back').onclick = function () { $('verify').hidden = true; $('form').hidden = false; B.resize(); };
+  function finish(msg) { $('form').hidden = true; $('verify').hidden = true; $('done').hidden = false; $('done-msg').innerHTML = msg; $('title').textContent = 'Aivy account connected'; B.resize(); }
+})();
+</script>
+</body>
+</html>
