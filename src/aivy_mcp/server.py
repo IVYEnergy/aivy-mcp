@@ -441,6 +441,12 @@ for _fn, _kwargs in _PLAIN_TOOLS:
 
 
 def main() -> None:
+    # `aivy-mcp setup [...]` configures the MCP clients on this computer;
+    # anything else runs the server on stdio.
+    import sys
+    if len(sys.argv) > 1 and sys.argv[1] == "setup":
+        from aivy_mcp.install import main as setup_main
+        raise SystemExit(setup_main(sys.argv[2:]))
     mcp.run()
 
 

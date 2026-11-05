@@ -30,7 +30,20 @@ be created from the API itself; see the
 
 ## 2. Add the server
 
-Claude Code (drop `-e AIVY_API_KEY=...` to sign up or sign in from the chat instead):
+**One line** (macOS, Linux; installs `uv` if missing, then writes the server
+into every MCP client it finds: Codex, Claude Code, Claude Desktop, Cursor):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/IVYEnergy/aivy-mcp/main/install.sh | sh
+```
+
+Already have `uv`? `uvx --from aivy-mcp aivy-mcp-setup` does the same, and
+`aivy-mcp setup --client codex --key aivy_sk_...` targets one client or
+stores an existing key. Files are backed up before they change. Restart the
+client, then say "sign me up to Aivy". An assistant that can run shell
+commands (Claude Code, Codex) can run the line for you.
+
+Or by hand. Claude Code (drop `-e AIVY_API_KEY=...` to sign up or sign in from the chat instead):
 
 ```bash
 claude mcp add aivy -e AIVY_API_KEY=aivy_sk_... -- uvx aivy-mcp
