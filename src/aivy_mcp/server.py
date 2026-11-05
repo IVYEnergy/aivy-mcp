@@ -21,7 +21,7 @@ try:  # mcp 2.x
 except ModuleNotFoundError:  # mcp 1.x
     from mcp.server.fastmcp import FastMCP as _Server
 
-from aivy_mcp.client import AivyClient, AivyError
+from aivy_mcp.client import NO_KEY_MESSAGE, AivyClient, AivyError, save_key
 from aivy_mcp.ui import UI_URIS, UI_URIS_BY_NAME, render_template
 
 # Cards in chat (MCP Apps, io.modelcontextprotocol/ui; ChatGPT reads the
@@ -65,6 +65,8 @@ _INSTRUCTIONS = (
         "time-boxed and the server returns the site to its previous mode when the time is up. "
         "Sites named sandbox:... are shared demo data: readable, never controllable. "
         "No site yet? list_vendors then connect_site links the user's own system. "
+        "No key yet (tools answer 'No Aivy API key')? register_account + verify_registration creates an account "
+        "and key from the chat; sign_in does the same for an existing account. "
         "Call get_agent_guide once at the start of a conversation: it is the playbook (which tools answer "
         "which questions, when to confirm, how to report) and takes precedence over guesses."
 )
@@ -94,6 +96,72 @@ async def _run(coro) -> str:
         return _dump({"error": str(e)})
 
 
+# ── account: register or sign in from the chat (no key needed) ──
+
+@_tool()
+async def get_registration_terms(locale: str = "en") -> str:
+    """Whether sign-up is open and the terms of use / privacy policy a new account accepts (version, hash and
+    a link). Show the link to the person and ask whether they accept BEFORE register_account."""
+    return await _run(_c().terms(locale))
+
+
+@_tool()
+async def register_account(email: str, password: str, display_name: str | None = None, locale: str = "en") -> str:
+    """Create an Aivy account from the chat, step 1 of 2: a verification code is emailed to `email`. Needs no API
+    key. Ask the person to choose the password (8+ characters; it is also their Aivy app password); do not invent
+    one. Then ask them for the code and call verify_registration. The reply looks the same whether or not the
+    address already has an account: a code that never arrives means check spam or use sign_in instead."""
+    body: dict[str, Any] = {"identifier": email, "password": password, "locale": locale}
+    if display_name:
+        body["display_name"] = display_name
+    return await _run(_c().register(body))
+
+
+@_tool()
+async def verify_registration(registration_id: str, registration_session: str, code: str, accept_terms: bool,
+                              key_name: str = "chat", scope: str = "read") -> str:
+    """Create an Aivy account from the chat, step 2 of 2: confirms the emailed code, accepts the terms (only pass
+    accept_terms=true after the person said yes), creates the account and an API key, and stores that key on this
+    computer (~/.aivy/credentials.json) so every other tool works from now on, in this and future sessions.
+    scope read (observe) or control (may change settings; only if the person asked). Never repeat the key back;
+    say it is saved and can be managed at https://bridge.ivyenergy.com.au/account."""
+    if not accept_terms:
+        return _dump({"error": "the person must accept the terms first (get_registration_terms shows them)"})
+    try:
+        out = await _c().verify({"registration_id": registration_id, "registration_session": registration_session,
+                                 "code": code, "accept_terms": True, "key_name": key_name, "scope": scope})
+    except AivyError as e:
+        return _dump({"error": str(e)})
+    key = out.pop("api_key", None)
+    out.pop("note", None)
+    if key:
+        path = save_key(_c().api_url, key, username=out.get("username"), key_name=key_name)
+        _c().use_key(key)
+        out["key_saved"] = str(path)
+        out["note"] = "the API key is saved on this computer and in use now; it is not shown"
+    return _dump(out)
+
+
+@_tool()
+async def sign_in(username: str, password: str, key_name: str = "chat", scope: str = "read") -> str:
+    """Use an existing Aivy account from the chat: creates an API key with the account's username (or email)
+    and password, stores it on this computer (~/.aivy/credentials.json) and uses it from now on. Needs no
+    existing key. scope read or control (control only if the person asked). The password is used once and not
+    stored; never repeat the key back."""
+    try:
+        out = await _c().create_key_with_password(username, password, {"name": key_name, "scope": scope})
+    except AivyError as e:
+        return _dump({"error": str(e)})
+    key = out.pop("key", None)
+    out.pop("note", None)
+    if key:
+        path = save_key(_c().api_url, key, username=username, key_name=key_name)
+        _c().use_key(key)
+        out["key_saved"] = str(path)
+        out["note"] = "the API key is saved on this computer and in use now; it is not shown"
+    return _dump(out)
+
+
 # ── playbook ──
 
 PLAYBOOK = (Path(__file__).parent / "playbook.md").read_text(encoding="utf-8")
@@ -112,7 +180,10 @@ async def get_agent_guide() -> str:
 
 @_tool()
 async def whoami() -> str:
-    """Check the API key: who it belongs to and whether it may control (scope read or control)."""
+    """Check the API key: who it belongs to and whether it may control (scope read or control). Without a key
+    it says so: then register_account (new) or sign_in (existing account) sets one up from the chat."""
+    if not _c().has_key:
+        return _dump({"error": NO_KEY_MESSAGE, "has_key": False})
     return await _run(_c().me())
 
 

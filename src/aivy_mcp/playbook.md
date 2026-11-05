@@ -183,45 +183,42 @@ notify; they never change what the battery does, and say so if asked for
 "charge when...". "Did anything happen overnight?" is `get_alert_events`.
 Demo sites do not raise alerts.
 
-### K. No account or key yet (registration)
-The MCP tools need a key to start, so this workflow is HTTP calls (or the
-web), and it is the only place a password is involved. Rules: never invent
-or store a password; never type the key into logs, files or later
-messages; the terms are accepted by the person, not by you.
+### K. No account or key yet (registration, in the chat)
+The tools answer "No Aivy API key" until one is set up. With the MCP
+tools this is done in the chat, in two steps, and the key is stored on the
+person's computer by the server (never shown, never in the transcript).
+Rules: the person chooses the password (it is also their Aivy app
+password); never invent one; the terms are accepted by the person, not by
+you; after it is done, do not repeat the key.
 
-**Preferred: the web.** Send the person to
-https://bridge.ivyenergy.com.au/developer. They sign up (or sign in), create
-a key (read only, or read and control) and paste it back. Nothing else to
-do: the same account works in the Aivy app.
+**New account:**
+1. `get_registration_terms`: if `registration_available` is false, send
+   them to https://bridge.ivyenergy.com.au/developer or support and stop.
+   Otherwise show the terms link and ask whether they accept.
+2. Ask for the email address and let them choose a password (8+
+   characters). Ask whether they want the key to be read-only (default) or
+   allowed to control.
+3. `register_account(email, password, display_name)`. Tell them a code was
+   emailed (check spam if it does not arrive; an address that already has
+   an account gets no code, so offer `sign_in`).
+4. Ask for the 6-digit code, then `verify_registration(registration_id,
+   registration_session, code, accept_terms=true, key_name, scope)` with
+   the ids from step 3. A 409 is a wrong code (five attempts) or an expired
+   session (30 minutes; start over at step 3).
+5. Say the account is ready and the key is saved on this computer
+   (manageable at https://bridge.ivyenergy.com.au/account), then continue
+   with section 2. Every new key lists the demo sites, so they can try
+   things before connecting hardware (H).
 
-**From the API** (when the person asks you to do it for them):
+**Existing account:** `sign_in(username_or_email, password, key_name,
+scope)`. The password is used once to create the key and is not stored.
 
-1. `GET /auth/terms`. If `registration_available` is false, registration is
-   closed for now; send them to the web page or support and stop. Otherwise
-   show the terms link (`web`) and the document versions.
-2. Ask for the email address they want on the account and let them choose
-   a password (at least 8 characters). Ask whether they accept the terms of
-   use and privacy policy. Do not continue without an explicit yes.
-3. `POST /auth/register` with `identifier`, `password`, `display_name`. The
-   response has `registration_id` and `registration_session` (keep them for
-   the next call; they expire in 30 minutes) and says a code was sent. The
-   response is the same whether or not the address already has an account,
-   so a missing email means: check spam, or sign in instead.
-4. Ask the person for the code from the email (or SMS).
-5. `POST /auth/verify` with `registration_id`, `registration_session`,
-   `code`, `accept_terms: true` (only because they said yes in step 2),
-   `key_name` (say what will use it, e.g. "Claude Code") and `scope`
-   (`read` unless they asked for control). The response carries `api_key`,
-   shown once. 409 means a wrong code (ask again; five attempts) or an
-   expired session (start over at step 3).
-6. Hand the key over once, tell them it will not be shown again and that
-   it can be revoked at bridge.ivyenergy.com.au/developer, then continue
-   with section 2 using it. Every new key lists the demo sites, so they can
-   try things before connecting hardware (H).
-
-**Already has an account, wants a key:** `POST /keys` with HTTP Basic
-(`username:password`) and `{"name", "scope"}`. Keys cannot create keys, so
-this needs the password; prefer the web page unless they ask.
+**HTTP-only agents** (no MCP tools) use the same endpoints:
+`GET /auth/terms`, `POST /auth/register`, `POST /auth/verify` (returns
+`api_key` once), or `POST /keys` with HTTP Basic for an existing account.
+The web page https://bridge.ivyenergy.com.au/developer does all of this
+too and is the better choice when the person prefers not to type a
+password into a chat.
 
 ## 5. Errors
 

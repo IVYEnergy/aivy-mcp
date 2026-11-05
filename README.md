@@ -8,12 +8,20 @@ An [MCP](https://modelcontextprotocol.io) server that lets your own AI assistant
 Works with every brand Aivy runs: Sungrow, Sigenergy, FoxESS, AlphaESS, SolaX
 and more. The same tools, whatever the inverter.
 
-## 1. Get a key
+## 1. Get a key (or let the chat do it)
 
-Open [bridge.ivyenergy.com.au/developer](https://bridge.ivyenergy.com.au/developer),
+**In the chat.** Add the server without any key (step 2) and say "sign me up
+to Aivy" or "sign in to my Aivy account". The assistant walks through the
+terms, the emailed code and the permission level (read only, or read and
+control), and the server stores the key on your computer
+(`~/.aivy/credentials.json`, readable by you only). The key is never shown
+in the chat.
+
+**On the web.** Open [bridge.ivyenergy.com.au/developer](https://bridge.ivyenergy.com.au/developer),
 sign up or sign in, and create a key. Pick **Read only** to let an assistant
 look, or **Read and control** to let it change the energy mode, Ai+ settings
-and connect systems. The key sees exactly what your account sees, nothing more.
+and connect systems. Then pass it as `AIVY_API_KEY` (step 2). The key sees
+exactly what your account sees, nothing more.
 
 No hardware yet? Every key also lists demo sites (`sandbox:...`, replayed real
 data, read-only), so you can try everything first. Accounts and keys can also
@@ -22,10 +30,19 @@ be created from the API itself; see the
 
 ## 2. Add the server
 
-Claude Code:
+Claude Code (drop `-e AIVY_API_KEY=...` to sign up or sign in from the chat instead):
 
 ```bash
 claude mcp add aivy -e AIVY_API_KEY=aivy_sk_... -- uvx aivy-mcp
+```
+
+Codex (`~/.codex/config.toml`):
+
+```toml
+[mcp_servers.aivy]
+command = "uvx"
+args = ["aivy-mcp"]
+# optional: [mcp_servers.aivy.env] AIVY_API_KEY = "aivy_sk_..."
 ```
 
 Claude Desktop / Cursor / any MCP client (`mcpServers` block):
@@ -117,7 +134,9 @@ locally: `node tests/ui/shoot.mjs` (needs `playwright`).
 | Tool | Changes anything? | What it does |
 |---|---|---|
 | `get_agent_guide` | no | The playbook above |
-| `whoami` | no | Who the key is, read or control |
+| `whoami` | no | Who the key is, read or control; says when there is no key yet |
+| `get_registration_terms`, `register_account`, `verify_registration` | account only | Create an Aivy account from the chat; the key is stored locally |
+| `sign_in` | account only | Create and store a key for an existing account (password used once) |
 | `list_sites` | no | Your sites; ids look like `sungrow:1445844` |
 | `get_site` | no | Capacity, limits, timezone, mode, live SOC |
 | `get_status` | no | Live SOC and power flows |

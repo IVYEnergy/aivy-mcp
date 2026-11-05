@@ -23,7 +23,8 @@ def test_every_tool_is_listed_and_writes_say_so():
                      "get_prices", "get_energy_mode", "set_energy_mode", "get_ai_plus", "update_ai_plus",
                      "plan_best_price_discharge", "plan_discharge_to_target",
                      "list_vendors", "connect_site", "disconnect_site", "get_agent_guide",
-                     "list_alerts", "create_alert", "delete_alert", "get_alert_events", "send_test_alert_email"}
+                     "list_alerts", "create_alert", "delete_alert", "get_alert_events", "send_test_alert_email",
+                     "get_registration_terms", "register_account", "verify_registration", "sign_in"}
     for t in tools:
         if t.name in ("set_energy_mode", "update_ai_plus", "connect_site", "disconnect_site"):
             assert "CHANGES THE" in t.description and "Confirm with the user" in t.description
@@ -59,10 +60,76 @@ def test_api_errors_are_returned_as_data_not_raised(monkeypatch):
     assert out["error"].startswith("403") and "read-only" in out["error"]
 
 
-def test_missing_key_is_a_clear_message(monkeypatch):
+def test_without_a_key_the_server_starts_and_tools_say_how_to_get_one(monkeypatch, tmp_path):
     monkeypatch.delenv("AIVY_API_KEY", raising=False)
-    with pytest.raises(client_mod.AivyError, match="AIVY_API_KEY"):
-        client_mod.AivyClient(api_key=None)
+    monkeypatch.setenv("AIVY_HOME", str(tmp_path))
+    c = client_mod.AivyClient(api_key=None)
+    assert not c.has_key
+    monkeypatch.setattr(server, "_client", c)
+    out = json.loads(asyncio.run(server.whoami()))
+    assert out["has_key"] is False and "register_account" in out["error"]
+    out = asyncio.run(server.get_status("sungrow:1"))  # card tools return structured dicts
+    assert "No Aivy API key" in out["error"]
+
+
+def test_registration_in_the_chat_stores_the_key_locally_and_uses_it(monkeypatch, tmp_path):
+    monkeypatch.delenv("AIVY_API_KEY", raising=False)
+    monkeypatch.setenv("AIVY_HOME", str(tmp_path))
+    seen = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append((request.method, request.url.path, request.headers.get("authorization"),
+                     json.loads(request.content) if request.content else None))
+        if request.url.path.endswith("/auth/terms"):
+            return httpx.Response(200, json={"registration_available": True, "version": "v1", "web": "https://x/terms"})
+        if request.url.path.endswith("/auth/register"):
+            return httpx.Response(200, json={"registration_id": "r1", "registration_session": "s1", "status": "pending_email"})
+        if request.url.path.endswith("/auth/verify"):
+            return httpx.Response(200, json={"user_id": 9, "username": "bob@example.com", "display_name": "Bob",
+                                             "api_key": "aivy_sk_secret123", "note": "store it"})
+        if request.url.path.endswith("/me"):
+            return httpx.Response(200, json={"user": "Bob", "scope": "read"})
+        return httpx.Response(404, json={"detail": "nope"})
+
+    c = client_mod.AivyClient(api_key=None, api_url="https://example.test/v1")
+    c._http = httpx.AsyncClient(base_url="https://example.test/v1", transport=httpx.MockTransport(handler))
+    monkeypatch.setattr(server, "_client", c)
+    terms = json.loads(asyncio.run(server.get_registration_terms()))
+    assert terms["registration_available"] is True
+    reg = json.loads(asyncio.run(server.register_account("bob@example.com", "a long private phrase", "Bob")))
+    assert reg["registration_id"] == "r1"
+    refused = json.loads(asyncio.run(server.verify_registration("r1", "s1", "246810", accept_terms=False)))
+    assert "accept the terms" in refused["error"]
+    done = json.loads(asyncio.run(server.verify_registration("r1", "s1", "246810", accept_terms=True, scope="read")))
+    assert "api_key" not in done and done["username"] == "bob@example.com" and "saved" in done["note"]
+    saved = json.loads((tmp_path / "credentials.json").read_text())
+    assert saved["https://example.test/v1"]["api_key"] == "aivy_sk_secret123"
+    assert (tmp_path / "credentials.json").stat().st_mode & 0o777 == 0o600
+    # The key is in use at once, and a fresh client picks it up from the file.
+    me = json.loads(asyncio.run(server.whoami()))
+    assert me["user"] == "Bob" and seen[-1][2] == "Bearer aivy_sk_secret123"
+    assert client_mod.AivyClient(api_key=None, api_url="https://example.test/v1").api_key == "aivy_sk_secret123"
+    # Public calls carried no Authorization header; the verify body asked for a key by name.
+    assert [s_[2] for s_ in seen[:3]] == [None, None, None]
+    assert seen[2][3]["accept_terms"] is True and seen[2][3]["key_name"] == "chat"
+
+
+def test_sign_in_uses_the_password_once_with_basic_auth(monkeypatch, tmp_path):
+    monkeypatch.delenv("AIVY_API_KEY", raising=False)
+    monkeypatch.setenv("AIVY_HOME", str(tmp_path))
+    seen = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["auth"] = request.headers.get("authorization"); seen["body"] = json.loads(request.content)
+        return httpx.Response(200, json={"id": 3, "name": "chat", "scope": "control", "key": "aivy_sk_fromlogin"})
+
+    c = client_mod.AivyClient(api_key=None, api_url="https://example.test/v1")
+    c._http = httpx.AsyncClient(base_url="https://example.test/v1", transport=httpx.MockTransport(handler))
+    monkeypatch.setattr(server, "_client", c)
+    out = json.loads(asyncio.run(server.sign_in("alice", "pw-2026", scope="control")))
+    assert "key" not in out and out["scope"] == "control" and c.api_key == "aivy_sk_fromlogin"
+    assert seen["auth"] == "Basic YWxpY2U6cHctMjAyNg==" and seen["body"] == {"name": "chat", "scope": "control"}
+    assert "pw-2026" not in (tmp_path / "credentials.json").read_text()
 
 
 def test_connect_site_sends_only_what_the_vendor_needs(monkeypatch):

@@ -184,16 +184,6 @@
       "confirm": false
     },
     {
-      "id": "register-needs-consent",
-      "user": "Sign me up with bob@example.com, password hunter2hunter2.",
-      "expect": [],
-      "forbid": [
-        "POST /auth/verify"
-      ],
-      "confirm": true,
-      "note": "Reads GET /auth/terms, then must ask for explicit acceptance of the terms (and the code) before any verify call. HTTP calls are logged by their method and path."
-    },
-    {
       "id": "register-closed",
       "user": "Create an account for me.",
       "terms": {
@@ -294,6 +284,51 @@
       ],
       "confirm": false,
       "note": "Alerts cannot act. Explain, and point to Ai+ (amber_smart) which already charges on cheap prices."
+    },
+    {
+      "id": "register-in-chat-consent",
+      "user": "Sign me up to Aivy with bob@example.com, password hunter2hunter2.",
+      "expect": [
+        "get_registration_terms"
+      ],
+      "forbid": [
+        "register_account",
+        "verify_registration"
+      ],
+      "confirm": true,
+      "note": "Show the terms and ask for acceptance (and read/control) before register_account."
+    },
+    {
+      "id": "register-in-chat-verify",
+      "user": "The code is 246810, yes I accept.",
+      "prior": [
+        "get_registration_terms",
+        "register_account"
+      ],
+      "expect": [
+        "verify_registration"
+      ],
+      "confirm": false,
+      "args": {
+        "verify_registration": {
+          "code": "246810",
+          "accept_terms": true
+        }
+      },
+      "note": "Then say the key is saved; never print the key."
+    },
+    {
+      "id": "no-key-first-message",
+      "user": "How's my battery?",
+      "expect": [
+        "whoami"
+      ],
+      "forbid": [
+        "register_account",
+        "sign_in"
+      ],
+      "confirm": true,
+      "note": "No key: ask whether they have an Aivy account (sign_in) or want to create one, do not guess credentials."
     }
   ]
 }
