@@ -10,10 +10,15 @@ and more. The same tools, whatever the inverter.
 
 ## 1. Get a key
 
-In the Aivy app (web or mobile) open the user menu, **API keys**, and create a
-key. Pick **Read only** to let an assistant look, or **Read and control** to
-let it change the energy mode and Ai+ settings. The key sees exactly what your
-account sees, nothing more.
+Open [bridge.ivyenergy.com.au/developer](https://bridge.ivyenergy.com.au/developer),
+sign up or sign in, and create a key. Pick **Read only** to let an assistant
+look, or **Read and control** to let it change the energy mode, Ai+ settings
+and connect systems. The key sees exactly what your account sees, nothing more.
+
+No hardware yet? Every key also lists demo sites (`sandbox:...`, replayed real
+data, read-only), so you can try everything first. Accounts and keys can also
+be created from the API itself; see the
+[Quickstart](https://bridge.ivyenergy.com.au/v1/docs#description/quickstart).
 
 ## 2. Add the server
 
@@ -54,6 +59,7 @@ HTTP API directly. Paste this into the chat:
 - "Plan the best time to sell tonight, keep 20%, then apply it."
 - "Charge at 5 kW to 90% for the next two hours." (control key)
 - "Make Ai+ a bit more aggressive on exports." (control key)
+- "Connect my Sungrow inverter, serial A2340000001, NMI 2001234567." (control key)
 
 ## Tools
 
@@ -67,6 +73,9 @@ HTTP API directly. Paste this into the chat:
 | `get_earnings` | no | A day's energy, priced at Amber's actual prices |
 | `get_operations` | no | What the platform did and why |
 | `get_prices` | no | Amber prices now and forecast |
+| `list_vendors` | no | Supported brands and what connecting one needs |
+| `connect_site` | **yes** | Link the user's system (serial + NMI, system id, or an OAuth link to open) |
+| `disconnect_site` | **yes** | Remove a site from the account |
 | `get_energy_mode` | no | Mode, windows, pending hand-back |
 | `set_energy_mode` | **yes** | selfConsumption / amber_smart (Ai+) / forced (time-boxed) |
 | `get_ai_plus` | no | Ai+ variant, settings and tunable ranges |

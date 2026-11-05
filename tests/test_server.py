@@ -21,12 +21,13 @@ def test_every_tool_is_listed_and_writes_say_so():
     names = {t.name for t in tools}
     assert names == {"whoami", "list_sites", "get_site", "get_status", "get_curve", "get_earnings", "get_operations",
                      "get_prices", "get_energy_mode", "set_energy_mode", "get_ai_plus", "update_ai_plus",
-                     "plan_best_price_discharge", "plan_discharge_to_target"}
+                     "plan_best_price_discharge", "plan_discharge_to_target",
+                     "list_vendors", "connect_site", "disconnect_site"}
     for t in tools:
-        if t.name in ("set_energy_mode", "update_ai_plus"):
-            assert "CHANGES THE SITE" in t.description and "Confirm with the user" in t.description
+        if t.name in ("set_energy_mode", "update_ai_plus", "connect_site", "disconnect_site"):
+            assert "CHANGES THE" in t.description and "Confirm with the user" in t.description
         else:
-            assert "CHANGES THE SITE" not in t.description
+            assert "CHANGES THE" not in t.description
 
 
 def test_set_energy_mode_sends_only_the_given_fields_and_bearer_auth(monkeypatch):
@@ -61,3 +62,17 @@ def test_missing_key_is_a_clear_message(monkeypatch):
     monkeypatch.delenv("AIVY_API_KEY", raising=False)
     with pytest.raises(client_mod.AivyError, match="AIVY_API_KEY"):
         client_mod.AivyClient(api_key=None)
+
+
+def test_connect_site_sends_only_what_the_vendor_needs(monkeypatch):
+    seen = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["method"] = request.method
+        seen["body"] = json.loads(request.content)
+        return httpx.Response(200, json={"vendor": "sungrow", "connected": ["sungrow:S4"], "contested": []})
+
+    monkeypatch.setattr(server, "_client", _client_with(handler))
+    out = json.loads(asyncio.run(server.connect_site("sungrow", sn="A234", nmi="2001234567")))
+    assert out["connected"] == ["sungrow:S4"]
+    assert seen["method"] == "POST" and seen["body"] == {"vendor": "sungrow", "region": "AU", "sn": "A234", "nmi": "2001234567"}

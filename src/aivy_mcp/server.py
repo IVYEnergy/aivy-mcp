@@ -30,7 +30,9 @@ mcp = _Server(
         "Power is in watts (battery_w > 0 charging, grid_w > 0 exporting), SOC in percent, prices in "
         "Australian cents per kWh. Readings refresh about once a minute: do not poll faster. "
         "Changing the mode or Ai+ settings needs a control-scope key; a forced (manual) mode set here is "
-        "time-boxed and the server returns the site to its previous mode when the time is up."
+        "time-boxed and the server returns the site to its previous mode when the time is up. "
+        "Sites named sandbox:... are shared demo data: readable, never controllable. "
+        "No site yet? list_vendors then connect_site links the user's own system."
     ),
 )
 
@@ -115,6 +117,41 @@ async def get_prices(site_id: str, hours: int = 8, resolution: int = 30) -> str:
     (c/kWh incl. GST), with a summary of cheapest/dearest periods. resolution 30 (up to 24 h) or 5 (up to 4 h).
     Fails with 409 when no Amber account is linked to the site."""
     return await _run(_c().prices(site_id, hours, resolution))
+
+
+# ── connecting systems ──
+
+@mcp.tool()
+async def list_vendors() -> str:
+    """Every inverter / battery brand Aivy can connect, whether it is available on this deployment, what
+    connecting one needs (`connect`: serial + NMI, a system id, or an OAuth sign-in at the vendor) and how much
+    of it can be controlled. Use before connect_site."""
+    return await _run(_c().vendors())
+
+
+@mcp.tool()
+async def connect_site(vendor: str, sn: str | None = None, nmi: str | None = None, system_id: str | None = None,
+                       region: str = "AU") -> str:
+    """CHANGES THE ACCOUNT (control scope). Confirm with the user before calling.
+
+    Link the user's system to their Aivy account. Serial-number vendors (Sungrow and FoxESS need sn + nmi,
+    Sigenergy needs system_id, most others sn) return `connected` site ids. OAuth vendors (AlphaESS, SolaX)
+    return an `authorize_url`: give it to the user to open in a browser and approve; the site then appears in
+    list_sites within a minute. Demo sites need no connecting."""
+    body: dict[str, Any] = {"vendor": vendor, "region": region}
+    for key, value in (("sn", sn), ("nmi", nmi), ("system_id", system_id)):
+        if value:
+            body[key] = value
+    return await _run(_c().connect_site(body))
+
+
+@mcp.tool()
+async def disconnect_site(site_id: str) -> str:
+    """CHANGES THE ACCOUNT (control scope). Confirm with the user before calling.
+
+    Remove a site from the user's account. The vendor-side link and history are left alone; the account just
+    stops seeing it. Demo sites cannot be removed."""
+    return await _run(_c().disconnect_site(site_id))
 
 
 # ── control ──

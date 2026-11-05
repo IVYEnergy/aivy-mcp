@@ -77,6 +77,15 @@ class AivyClient:
     async def prices(self, site_id: str, hours: int = 8, resolution: int = 30) -> dict:
         return await self._call("GET", f"/sites/{site_id}/prices", params={"hours": hours, "resolution": resolution})
 
+    async def vendors(self) -> dict:
+        return await self._call("GET", "/vendors")
+
+    async def connect_site(self, body: dict) -> dict:
+        return await self._call("POST", "/sites", json=body)
+
+    async def disconnect_site(self, site_id: str) -> dict:
+        return await self._call("DELETE", f"/sites/{site_id}")
+
     # ── control ──
     async def energy_mode(self, site_id: str) -> dict:
         return await self._call("GET", f"/sites/{site_id}/energy-mode")
