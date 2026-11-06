@@ -137,6 +137,15 @@ of text, in the same style as the Aivy mobile app, light and dark:
 | `get_prices` | Buying / selling now, the next hours as bars, the best hours to sell highlighted |
 | `plan_best_price_discharge` | Revenue headline, the chosen windows on a timeline and an **Apply** button; the click is the user's yes and calls `set_energy_mode` |
 | `get_registration_terms` | A sign-up / sign-in form: email, password, permission level and the terms are entered in the card and sent to Aivy by the card itself, never through the chat |
+| `get_energy_mode` | Control panel: today's windows on a 24-hour bar, the pending hand-back, mode buttons and a manual charge / discharge form; the click is the user's yes |
+| `list_vendors` | Connect a system: pick the brand, enter what it needs (or sign in at the vendor), see the new site appear |
+| `get_curve` | Power history: solar, home, battery, grid lines with SOC |
+| `get_earnings` | A day's net, earned, cost, exported and imported, hour by hour |
+| `get_operations` | Timeline of what the platform did and why |
+| `get_ai_plus` | Ai+ levers as sliders and switches, built from the engine's own ranges; Save |
+| `plan_discharge_to_target` | The hold-a-reserve plan with Apply |
+| `list_alerts` | Alert rules with Delete, and a form to add one (email optional) |
+| `list_sites` | Your sites with a Status button each |
 
 Every card is one self-contained HTML document (no network, no assets), so
 it works under the extension's default content security policy. Hosts

@@ -56,12 +56,18 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
     if (d.error) { $('empty').innerHTML = '<span class="err">' + B.esc(d.error) + '</span>'; return; }
     $('sub').textContent = (d.window_start && d.window_end ? d.window_start + ' to ' + d.window_end : '') + (d.timezone ? ' · ' + d.timezone : '');
     if (d.current_mode) { $('mode').textContent = d.current_mode === 'amber_smart' ? 'Ai+ now' : d.current_mode; }
-    if (d.nothing_to_do || !(d.intervals && d.intervals.length)) {
-      $('empty').textContent = d.reason || 'Nothing to sell in this window.'; return;
+    if (!d.intervals && d.slot) {
+      // plan_discharge_to_target: one steady window at power_w ending at target_soc
+      document.querySelector('.title').textContent = 'Hold ' + B.esc(d.target_soc) + '% until ' + B.esc(d.end);
+      d.intervals = [{ start: d.slot.start, end: d.slot.end, sell_c: null, kwh: d.energy_kwh, power_w: d.power_w }];
+      d.window_start = d.start; d.window_end = d.end; d.revenue_dollars = null;
+    }
+    if (d.nothing_to_do || d.feasible === false || !(d.intervals && d.intervals.length)) {
+      $('empty').textContent = d.reason || 'Nothing to do in this window.'; return;
     }
     $('empty').hidden = true; $('plan').hidden = false;
-    $('revenue').textContent = B.money(d.revenue_dollars);
-    $('what').textContent = 'for ' + (d.energy_kwh || 0) + ' kWh';
+    if (d.revenue_dollars === null) { $('revenue').textContent = B.kw(d.power_w, 1); $('what').textContent = 'steady, from ' + B.esc(d.soc_now) + '% down to ' + B.esc(d.target_soc) + '%' + (d.hours ? ' over ' + d.hours + ' h' : ''); }
+    else { $('revenue').textContent = B.money(d.revenue_dollars); $('what').textContent = 'for ' + (d.energy_kwh || 0) + ' kWh'; }
     var facts = [];
     if (d.avg_sell_c) facts.push('<span>average <b>' + d.avg_sell_c + ' c/kWh</b></span>');
     if (d.window_avg_sell_c) facts.push('<span>window average <b>' + d.window_avg_sell_c + ' c/kWh</b></span>');
@@ -75,11 +81,11 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
       var a = mins(iv.start), b = mins(iv.end); if (a < s0) a += 1440; if (b <= a) b += 1440;
       var el = document.createElement('div'); el.className = 'win';
       el.style.left = ((a - s0) / span * 100) + '%'; el.style.width = (Math.max(1, b - a) / span * 100) + '%';
-      el.innerHTML = '<span>' + B.esc(iv.sell_c) + 'c</span>'; tl.appendChild(el);
+      el.innerHTML = '<span>' + (iv.sell_c === null || iv.sell_c === undefined ? B.kw(iv.power_w, 1) : B.esc(iv.sell_c) + 'c') + '</span>'; tl.appendChild(el);
     });
     $('t0').textContent = d.window_start || ''; $('t1').textContent = d.window_end || '';
     $('rows').innerHTML = (d.intervals || []).map(function (iv) {
-      return '<tr><td>' + B.esc(iv.start) + ' – ' + B.esc(iv.end) + '</td><td class="num">' + B.esc(iv.sell_c) + ' c</td><td class="num">' + B.esc(iv.kwh) + ' kWh</td><td class="num">' + B.kw(iv.power_w, 1) + '</td></tr>';
+      return '<tr><td>' + B.esc(iv.start) + ' – ' + B.esc(iv.end) + '</td><td class="num">' + (iv.sell_c === null || iv.sell_c === undefined ? '–' : B.esc(iv.sell_c) + ' c') + '</td><td class="num">' + (iv.kwh === null || iv.kwh === undefined ? '–' : B.esc(iv.kwh) + ' kWh') + '</td><td class="num">' + B.kw(iv.power_w, 1) + '</td></tr>';
     }).join('');
     var notes = (d.notes || []).slice(); (d.conflicts || []).forEach(function (c) { notes.push('Replaces: ' + (typeof c === 'string' ? c : JSON.stringify(c))); });
     $('notes').innerHTML = notes.map(function (n) { return '<li>' + B.esc(n) + '</li>'; }).join('');

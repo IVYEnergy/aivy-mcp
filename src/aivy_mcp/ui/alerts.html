@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aivy alerts</title>
+<style>/*BASE_CSS*/
+.rules { list-style: none; margin: 4px 0 10px; padding: 0; }
+.rules li { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--border); }
+.rules li:first-child { border-top: 0; }
+.rules .n { font-weight: 600; font-size: 13px; }
+.rules .c { font-size: 12px; color: var(--text2); }
+.rules .del { appearance: none; border: 0; background: none; color: var(--text3); cursor: pointer; font-size: 12px; padding: 4px 6px; }
+.rules .del:hover { color: var(--danger); }
+.new { background: var(--fill); border-radius: 12px; padding: 10px 12px; }
+.new h4 { margin: 0 0 6px; font-size: 13px; }
+label { display: block; font-size: 11px; color: var(--text3); margin: 6px 0 3px; }
+input[type=text], input[type=number], select { width: 100%; font: inherit; font-size: 13px; padding: 7px 9px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); }
+.grid3 { display: grid; grid-template-columns: 1.3fr 1fr 1fr; gap: 8px; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.check { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text2); margin-top: 8px; }
+.actions { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+.state { font-size: 12px; color: var(--text2); } .state.ok { color: var(--brand); } .state.bad { color: var(--danger); }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="card-head">
+    <div class="mark"><svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg></div>
+    <div><div class="title">Alerts</div><div class="sub" id="sub"></div></div>
+  </div>
+  <div class="card-body">
+    <div class="empty" id="empty">Loading rules…</div>
+    <div id="main" hidden>
+      <ul class="rules" id="rules"></ul>
+      <div class="new">
+        <h4>New alert</h4>
+        <div class="grid3">
+          <div><label>Name</label><input type="text" id="name" placeholder="Battery low" maxlength="100"></div>
+          <div><label>Watch</label><select id="metric"><option value="soc">Battery SOC (%)</option><option value="import_price">Import price (c/kWh)</option><option value="export_price">Feed-in price (c/kWh)</option><option value="temperature">Forecast temperature (°C)</option></select></div>
+          <div><label>When</label><select id="op"><option value="below">below</option><option value="above">above</option></select></div>
+        </div>
+        <div class="grid2">
+          <div><label>Threshold</label><input type="number" id="thr" value="20"></div>
+          <div><label>Quiet time after a firing</label><select id="cool"><option value="60">1 hour</option><option value="180">3 hours</option><option value="360" selected>6 hours</option><option value="1440">24 hours</option></select></div>
+        </div>
+        <div class="check"><input type="checkbox" id="email" checked><span>Also email me</span></div>
+        <div class="actions"><button class="btn" id="add">Add alert</button><span class="state" id="state"></span></div>
+      </div>
+    </div>
+  </div>
+  <div class="card-foot"><span>Alerts only tell you; they never change what the battery does.</span></div>
+</div>
+<script>/*BRIDGE_JS*/</script>
+<script>
+(function () {
+  var B = window.AivyBridge, $ = function (id) { return document.getElementById(id); };
+  var METRIC = { soc: ['SOC', '%'], import_price: ['import', 'c'], export_price: ['feed-in', 'c'], temperature: ['forecast', '°C'] };
+  var site = null;
+  function parse(res) { var out = res; if (res && res.content && res.content[0] && res.content[0].text) { try { out = JSON.parse(res.content[0].text); } catch (e) {} } if (out && out.structuredContent) out = out.structuredContent; return out || {}; }
+  function draw(rules) {
+    var ul = $('rules');
+    if (!rules.length) { ul.innerHTML = '<li><span class="c">No alerts on this site yet.</span></li>'; B.resize(); return; }
+    ul.innerHTML = rules.map(function (r) { var m = METRIC[r.metric] || [r.metric, '']; return '<li><div style="flex:1"><div class="n">' + B.esc(r.name) + (r.email ? ' <span class="chip" style="font-size:10px">email</span>' : '') + '</div><div class="c">' + B.esc(m[0]) + ' ' + B.esc(r.operator) + ' ' + B.esc(r.threshold) + m[1] + ' · quiet ' + Math.round((r.cooldown_minutes || 0) / 60) + 'h' + (r.last_triggered_at ? ' · last fired ' + new Date(r.last_triggered_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '') + '</div></div><button class="del" data-id="' + r.id + '">Delete</button></li>'; }).join('');
+    ul.querySelectorAll('.del').forEach(function (b) { b.onclick = function () { b.disabled = true; B.callTool('delete_alert', { site_id: site, rule_id: +b.dataset.id }).then(reload).catch(function () { b.disabled = false; }); }; });
+    B.resize();
+  }
+  function reload() { return B.callTool('list_alerts', { site_id: site }).then(function (res) { draw(parse(res).rules || []); }); }
+  B.onData(function (d) {
+    if (d.error) { $('empty').innerHTML = '<span class="err">' + B.esc(d.error) + '</span>'; return; }
+    site = d.site_id || d.id; $('sub').textContent = B.siteLabel(d); $('empty').hidden = true; $('main').hidden = false; draw(d.rules || []);
+  });
+  $('metric').onchange = function () { $('thr').value = { soc: 20, import_price: 30, export_price: 50, temperature: 35 }[$('metric').value]; $('op').value = $('metric').value === 'soc' ? 'below' : 'above'; };
+  $('add').onclick = function () {
+    var state = $('state'), name = $('name').value.trim(); state.className = 'state';
+    if (!name) { state.className = 'state bad'; state.textContent = 'Give the alert a name.'; return; }
+    $('add').disabled = true; state.textContent = 'Adding…';
+    B.callTool('create_alert', { site_id: site, name: name, metric: $('metric').value, operator: $('op').value, threshold: +$('thr').value, email: $('email').checked, cooldown_minutes: +$('cool').value })
+      .then(function (res) { var out = parse(res); $('add').disabled = false; if (out.error) { state.className = 'state bad'; state.textContent = out.error; return; } state.className = 'state ok'; state.textContent = 'Added'; $('name').value = ''; return reload(); })
+      .catch(function (e) { $('add').disabled = false; state.className = 'state bad'; state.textContent = (e && e.message) || 'Could not add'; });
+  };
+})();
+</script>
+</body>
+</html>

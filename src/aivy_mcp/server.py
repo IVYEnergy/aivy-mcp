@@ -48,9 +48,10 @@ def _tool(**kwargs: Any):
 
 
 def ui_tool(resource_uri: str, *, invoking: str, invoked: str):
-    """Decorator: a tool whose result the host may render as a card."""
+    """Decorator: a tool whose result the host may render as a card. Card
+    tools are also callable from other cards (ChatGPT needs the flag)."""
     meta = {"openai/outputTemplate": resource_uri, "openai/toolInvocation/invoking": invoking,
-            "openai/toolInvocation/invoked": invoked}
+            "openai/toolInvocation/invoked": invoked, "openai/widgetAccessible": True}
     if apps is not None:
         return apps.tool(resource_uri=resource_uri, meta=meta)
     return _tool(meta=meta)
@@ -94,6 +95,19 @@ async def _run(coro) -> str:
         return _dump(await coro)
     except AivyError as e:
         return _dump({"error": str(e)})
+
+
+async def _data(coro, **extra: Any) -> dict[str, Any]:
+    """Like _run, for tools with a card: structured content, errors as data,
+    plus the keys the card needs (the site id, for its buttons)."""
+    try:
+        out = await coro
+    except AivyError as e:
+        return {"error": str(e), **extra}
+    if isinstance(out, dict):
+        out.update(extra)
+        return out
+    return {"data": out, **extra}
 
 
 # ── account: register or sign in from the chat (no key needed) ──
@@ -193,18 +207,18 @@ async def whoami() -> str:
     return await _run(_c().me())
 
 
-@_tool()
-async def list_sites() -> str:
+@ui_tool(UI_URIS_BY_NAME["sites"], invoking="Listing your sites", invoked="Your sites")
+async def list_sites() -> dict[str, Any]:
     """List the user's solar + battery sites across vendors. Returns id (vendor:station_id, used by every other
     tool), vendor, name, online and the vendor's headline power in W. Start here."""
     try:
         out = await _c().sites()
     except AivyError as e:
-        return _dump({"error": str(e)})
+        return {"error": str(e)}
     for site in out.get("sites", []):
         if site.get("id") and site.get("name"):
             _site_names[site["id"]] = site["name"]
-    return _dump(out)
+    return out
 
 
 @_tool()
@@ -229,28 +243,28 @@ async def get_status(site_id: str) -> dict[str, Any]:
     return out
 
 
-@_tool()
-async def get_curve(site_id: str, range: str = "1d", day: str | None = None) -> str:
+@ui_tool(UI_URIS_BY_NAME["curve"], invoking="Loading history", invoked="Power history")
+async def get_curve(site_id: str, range: str = "1d", day: str | None = None) -> dict[str, Any]:
     """Power and SOC history. range 1d = 5-minute points for one local day (day = YYYY-MM-DD, default today);
     7d / 30d = daily values. Returns times (UTC), local_times, and series per channel (pv, load, battery, grid,
     soc). Large: summarise before quoting."""
-    return await _run(_c().curve(site_id, range, day))
+    return await _data(_c().curve(site_id, range, day), site_id=site_id)
 
 
-@_tool()
+@ui_tool(UI_URIS_BY_NAME["earnings"], invoking="Adding up the day", invoked="Earnings")
 async def get_earnings(site_id: str, date: str | None = None, window_start: str | None = None,
-                       window_end: str | None = None) -> str:
+                       window_end: str | None = None) -> dict[str, Any]:
     """Energy bought, sold and self-consumed for a day (YYYY-MM-DD, 'today' or 'yesterday'), priced at the actual
     Amber half-hourly prices when Amber is linked. Optional HH:MM window for part of the day. An estimate from
     vendor power samples, not the bill; read `coverage` and say so when it is partial."""
-    return await _run(_c().earnings(site_id, date, window_start, window_end))
+    return await _data(_c().earnings(site_id, date, window_start, window_end), site_id=site_id)
 
 
-@_tool()
-async def get_operations(site_id: str, limit: int = 20) -> str:
+@ui_tool(UI_URIS_BY_NAME["operations"], invoking="Reading the log", invoked="Operations")
+async def get_operations(site_id: str, limit: int = 20) -> dict[str, Any]:
     """What the platform did to the site and why, newest first: each automatic (Ai+) and manual command with its
     reason and the prices at the time. Use it to explain 'why did it charge at 3am'."""
-    return await _run(_c().operations(site_id, limit))
+    return await _data(_c().operations(site_id, limit), site_id=site_id)
 
 
 @ui_tool(UI_URIS_BY_NAME["prices"], invoking="Fetching Amber prices", invoked="Prices")
@@ -266,15 +280,15 @@ async def get_prices(site_id: str, hours: int = 8, resolution: int = 30) -> dict
 
 # ── connecting systems ──
 
-@_tool()
-async def list_vendors() -> str:
+@ui_tool(UI_URIS_BY_NAME["connect"], invoking="Listing supported brands", invoked="Connect a system")
+async def list_vendors() -> dict[str, Any]:
     """Every inverter / battery brand Aivy can connect, whether it is available on this deployment, what
     connecting one needs (`connect`: serial + NMI, a system id, or an OAuth sign-in at the vendor) and how much
     of it can be controlled. Use before connect_site."""
-    return await _run(_c().vendors())
+    return await _data(_c().vendors())
 
 
-@_tool()
+@_tool(meta={"openai/widgetAccessible": True})
 async def connect_site(vendor: str, sn: str | None = None, nmi: str | None = None, system_id: str | None = None,
                        region: str = "AU") -> str:
     """CHANGES THE ACCOUNT (control scope). Confirm with the user before calling.
@@ -301,14 +315,14 @@ async def disconnect_site(site_id: str) -> str:
 
 # ── alerts ──
 
-@_tool()
-async def list_alerts(site_id: str) -> str:
+@ui_tool(UI_URIS_BY_NAME["alerts"], invoking="Loading alerts", invoked="Alerts")
+async def list_alerts(site_id: str) -> dict[str, Any]:
     """The account's alert rules on a site: what each watches (soc %, import/export price c/kWh, forecast
     temperature °C), above/below which threshold, whether it emails, and when it last fired."""
-    return await _run(_c().alerts(site_id))
+    return await _data(_c().alerts(site_id), site_id=site_id)
 
 
-@_tool()
+@_tool(meta={"openai/widgetAccessible": True})
 async def create_alert(site_id: str, name: str, metric: str, operator: str, threshold: float,
                        email: bool = False, cooldown_minutes: int = 360, message: str = "",
                        active_start: str = "00:00", active_end: str = "00:00", locale: str = "en") -> str:
@@ -323,7 +337,7 @@ async def create_alert(site_id: str, name: str, metric: str, operator: str, thre
     return await _run(_c().create_alert(site_id, body))
 
 
-@_tool()
+@_tool(meta={"openai/widgetAccessible": True})
 async def delete_alert(site_id: str, rule_id: int) -> str:
     """Retire an alert rule (past firings stay in the inbox). Confirm with the user first."""
     return await _run(_c().delete_alert(site_id, rule_id))
@@ -345,11 +359,11 @@ async def send_test_alert_email() -> str:
 
 # ── control ──
 
-@_tool()
-async def get_energy_mode(site_id: str) -> str:
+@ui_tool(UI_URIS_BY_NAME["control"], invoking="Reading the energy mode", invoked="Energy mode")
+async def get_energy_mode(site_id: str) -> dict[str, Any]:
     """Current energy mode (selfConsumption | amber_smart = Ai+ | forced), its forced windows, the SOC floor, the
     Ai+ variant and settings when on Ai+, and any pending timed hand-back (reverts_at / reverts_to)."""
-    return await _run(_c().energy_mode(site_id))
+    return await _data(_c().energy_mode(site_id), site_id=site_id)
 
 
 @_tool(meta={"openai/widgetAccessible": True})
@@ -382,14 +396,14 @@ async def set_energy_mode(
     return await _run(_c().set_energy_mode(site_id, body))
 
 
-@_tool()
-async def get_ai_plus(site_id: str) -> str:
+@ui_tool(UI_URIS_BY_NAME["aiplus"], invoking="Loading Ai+ settings", invoked="Ai+ settings")
+async def get_ai_plus(site_id: str) -> dict[str, Any]:
     """Ai+ (amber_smart) configuration: active or not, engine variant and options, effective settings, and
     `tunable`: every lever with type, min, max, unit and default. Read before update_ai_plus."""
-    return await _run(_c().ai_plus(site_id))
+    return await _data(_c().ai_plus(site_id), site_id=site_id)
 
 
-@_tool()
+@_tool(meta={"openai/widgetAccessible": True})
 async def update_ai_plus(site_id: str, settings: dict[str, Any] | None = None, variant: str | None = None) -> str:
     """CHANGES THE SITE (control scope). Confirm with the user before calling.
 
@@ -421,9 +435,9 @@ async def plan_best_price_discharge(site_id: str, window_start: str | None = Non
     return out
 
 
-@_tool()
+@ui_tool(UI_URIS_BY_NAME["plan"], invoking="Planning the discharge", invoked="Discharge plan")
 async def plan_discharge_to_target(site_id: str, end: str, target_soc: int, start: str | None = None,
-                                   battery_capacity_kwh: float | None = None) -> str:
+                                   battery_capacity_kwh: float | None = None) -> dict[str, Any]:
     """Propose a steady discharge that lands on target_soc at end (HH:MM, site local), from the real capacity, SOC
     and power limits. Returns power_w and proposed time_slots. Nothing is applied."""
     body: dict[str, Any] = {"end": end, "target_soc": target_soc}
@@ -431,7 +445,7 @@ async def plan_discharge_to_target(site_id: str, end: str, target_soc: int, star
         body["start"] = start
     if battery_capacity_kwh:
         body["battery_capacity_kwh"] = battery_capacity_kwh
-    return await _run(_c().plan_discharge_to_target(site_id, body))
+    return await _data(_c().plan_discharge_to_target(site_id, body), site_id=site_id)
 
 
 # ── server ──

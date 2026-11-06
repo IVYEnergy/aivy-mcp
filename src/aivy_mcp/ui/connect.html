@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Connect a system to Aivy</title>
+<style>/*BASE_CSS*/
+.vendors { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 8px; margin: 4px 0 12px; }
+.v { border: 1px solid var(--border); border-radius: 10px; padding: 9px 10px; cursor: pointer; font-size: 13px; font-weight: 600; text-align: center; }
+.v small { display: block; font-weight: 400; font-size: 10px; color: var(--text3); margin-top: 2px; }
+.v.on { background: var(--brand-light); border-color: transparent; color: var(--brand); }
+.v.off { opacity: .45; cursor: default; }
+label { display: block; font-size: 12px; color: var(--text3); margin: 10px 0 4px; }
+input[type=text] { width: 100%; font: inherit; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--text); }
+.hint { font-size: 12px; color: var(--text3); margin-top: 4px; }
+.actions { display: flex; align-items: center; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+.state { font-size: 12px; color: var(--text2); } .state.ok { color: var(--brand); } .state.bad { color: var(--danger); }
+.result { margin-top: 10px; font-size: 13px; }
+.result code { background: var(--fill); padding: 2px 6px; border-radius: 6px; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="card-head">
+    <div class="mark"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></svg></div>
+    <div><div class="title">Connect your system</div><div class="sub">Pick the brand; the details go to Aivy directly, not through the chat.</div></div>
+  </div>
+  <div class="card-body">
+    <div class="empty" id="empty">Loading brands…</div>
+    <div id="main" hidden>
+      <div class="vendors" id="vendors"></div>
+      <div id="fields"></div>
+      <div class="actions" id="actions" hidden><button class="btn" id="go">Connect</button><span class="state" id="state"></span></div>
+      <div class="result" id="result"></div>
+    </div>
+  </div>
+  <div class="card-foot"><span>Prices and Ai+ also need your Amber account linked in the Aivy app.</span></div>
+</div>
+<script>/*BRIDGE_JS*/</script>
+<script>
+(function () {
+  var B = window.AivyBridge, $ = function (id) { return document.getElementById(id); };
+  var HINT = { sn: ['Serial number', 'On the inverter label or in the vendor app'], nmi: ['NMI', 'On your electricity bill, 10 or 11 characters'], system_id: ['System id', 'In the Sigenergy app'] };
+  var vendors = [], chosen = null;
+  function parse(res) { var out = res; if (res && res.content && res.content[0] && res.content[0].text) { try { out = JSON.parse(res.content[0].text); } catch (e) {} } if (out && out.structuredContent) out = out.structuredContent; return out || {}; }
+  function pick(v) {
+    if (!v.available) return;
+    chosen = v; $('result').innerHTML = ''; $('state').textContent = '';
+    document.querySelectorAll('.v').forEach(function (el) { el.className = 'v' + (el.dataset.id === v.id ? ' on' : '') + (el.dataset.off ? ' off' : ''); });
+    var f = $('fields'); f.innerHTML = '';
+    if (v.connect.method === 'oauth') {
+      f.innerHTML = '<p class="hint">You will sign in at ' + B.esc(v.name) + ' and approve Aivy in your browser; the system then appears here within a minute.</p>';
+      $('go').textContent = 'Sign in at ' + v.name;
+    } else {
+      (v.connect.fields || ['sn']).forEach(function (k) { var h = HINT[k] || [k, '']; f.innerHTML += '<label>' + B.esc(h[0]) + '</label><input type="text" data-field="' + B.esc(k) + '" autocomplete="off"><div class="hint">' + B.esc(h[1]) + '</div>'; });
+      $('go').textContent = 'Connect';
+    }
+    $('actions').hidden = false; $('go').disabled = false; B.resize();
+  }
+  B.onData(function (d) {
+    if (d.error) { $('empty').innerHTML = '<span class="err">' + B.esc(d.error) + '</span>'; return; }
+    vendors = d.vendors || []; $('empty').hidden = true; $('main').hidden = false;
+    var box = $('vendors'); box.innerHTML = '';
+    vendors.slice().sort(function (a, b) { return (b.available ? 1 : 0) - (a.available ? 1 : 0); }).forEach(function (v) {
+      var el = document.createElement('div'); el.className = 'v' + (v.available ? '' : ' off'); el.dataset.id = v.id; if (!v.available) el.dataset.off = '1';
+      el.innerHTML = B.esc(v.name) + '<small>' + (v.available ? (v.control === 'full' ? 'full control' : (v.control_limit || 'monitoring')) : 'not available yet') + '</small>';
+      el.onclick = function () { pick(v); }; box.appendChild(el);
+    });
+    B.resize();
+  });
+  function refresh() {
+    B.callTool('list_sites', {}).then(function (res) { var out = parse(res); var mine = (out.sites || []).filter(function (s) { return !s.demo; });
+      $('result').innerHTML += '<div>Your sites now: ' + (mine.length ? mine.map(function (s) { return '<code>' + B.esc(s.name || s.id) + '</code>'; }).join(' ') : 'none yet (give it a minute, then ask me to list sites)') + '</div>'; B.resize(); }).catch(function () {});
+  }
+  $('go').onclick = function () {
+    var btn = $('go'), state = $('state'); state.className = 'state';
+    var args = { vendor: chosen.id };
+    if (chosen.connect.method !== 'oauth') {
+      var missing = false;
+      document.querySelectorAll('#fields input').forEach(function (i) { var v = i.value.trim(); if (!v) missing = true; args[i.dataset.field] = v; });
+      if (missing) { state.className = 'state bad'; state.textContent = 'Fill in every field.'; return; }
+    }
+    btn.disabled = true; state.textContent = 'Connecting…';
+    B.callTool('connect_site', args).then(function (res) {
+      var out = parse(res);
+      if (out.error) { state.className = 'state bad'; state.textContent = out.error + (out.hint ? ' · ' + out.hint : ''); btn.disabled = false; return; }
+      if (out.authorize_url) {
+        state.className = 'state ok'; state.textContent = 'Approve Aivy in the browser window, then click Done.';
+        B.openLink(out.authorize_url);
+        btn.textContent = 'Done, check my sites'; btn.disabled = false; btn.onclick = function () { btn.disabled = true; state.textContent = 'Checking…'; refresh(); };
+        return;
+      }
+      var parts = [];
+      if ((out.connected || []).length) parts.push('Connected: ' + out.connected.map(function (s) { return '<code>' + B.esc(s) + '</code>'; }).join(' '));
+      if ((out.contested || []).length) parts.push('<span class="err">Already held by another account: ' + out.contested.map(B.esc).join(', ') + ' (an administrator sorts this out)</span>');
+      if (out.warning) parts.push('<span class="err">' + B.esc(out.warning) + '</span>');
+      if (out.note) parts.push(B.esc(out.note));
+      $('result').innerHTML = parts.join('<br>'); state.className = 'state ok'; state.textContent = (out.connected || []).length ? 'Connected' : 'Done';
+      refresh();
+    }).catch(function (e) { state.className = 'state bad'; state.textContent = (e && e.message) || 'Could not connect'; btn.disabled = false; });
+  };
+})();
+</script>
+</body>
+</html>

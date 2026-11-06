@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aivy operations</title>
+<style>/*BASE_CSS*/
+.log { list-style: none; margin: 4px 0 0; padding: 0; }
+.log li { display: grid; grid-template-columns: 54px 12px 1fr; gap: 10px; align-items: start; padding: 8px 0; border-top: 1px solid var(--border); }
+.log li:first-child { border-top: 0; }
+.when { font-size: 11px; color: var(--text3); padding-top: 2px; text-align: right; }
+.dot { width: 10px; height: 10px; border-radius: 50%; margin-top: 4px; background: var(--idle); }
+.dot.charge { background: var(--charge); } .dot.discharge { background: var(--discharge); } .dot.stop, .dot.revert { background: var(--idle); } .dot.set_mode { background: var(--info); } .dot.fail { background: var(--danger); }
+.what { font-size: 13px; }
+.what b { font-weight: 600; text-transform: capitalize; }
+.what .src { font-size: 11px; color: var(--text3); margin-left: 6px; }
+.reason { font-size: 12px; color: var(--text2); margin-top: 2px; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="card-head">
+    <div class="mark"><svg viewBox="0 0 24 24"><path d="M12 8v4l3 2"/><circle cx="12" cy="12" r="9"/></svg></div>
+    <div><div class="title">What the platform did</div><div class="sub" id="sub"></div></div>
+  </div>
+  <div class="card-body">
+    <div class="empty" id="empty">Loading the log…</div>
+    <ul class="log" id="log" hidden></ul>
+  </div>
+  <div class="card-foot"><span>Newest first · auto = Ai+ or a schedule, manual = the app, api = an assistant or script</span></div>
+</div>
+<script>/*BRIDGE_JS*/</script>
+<script>
+(function () {
+  var B = window.AivyBridge, $ = function (id) { return document.getElementById(id); };
+  function when(s) { var d = new Date(String(s).replace(' ', 'T')); if (isNaN(d)) return String(s).slice(5, 16); var diff = (Date.now() - d) / 60000; if (diff < 60) return Math.max(1, Math.round(diff)) + 'm ago'; if (diff < 36 * 60) return Math.round(diff / 60) + 'h ago'; return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); }
+  B.onData(function (d) {
+    if (d.error) { $('empty').innerHTML = '<span class="err">' + B.esc(d.error) + '</span>'; return; }
+    var logs = d.logs || [];
+    $('sub').textContent = B.siteLabel(d);
+    if (!logs.length) { $('empty').textContent = 'Nothing recorded yet.'; return; }
+    $('empty').hidden = true; $('log').hidden = false;
+    $('log').innerHTML = logs.map(function (l) {
+      var cls = l.success === false ? 'fail' : (l.action || '').toLowerCase();
+      return '<li><div class="when">' + B.esc(when(l.at)) + '</div><div class="dot ' + B.esc(cls) + '"></div><div><div class="what"><b>' + B.esc(l.action || '') + '</b>' + (l.success === false ? ' <span class="err">failed</span>' : '') + '<span class="src">' + B.esc(l.source || '') + '</span></div>' + (l.reason ? '<div class="reason">' + B.esc(l.reason) + '</div>' : '') + '</div></li>';
+    }).join('');
+    B.resize();
+  });
+})();
+</script>
+</body>
+</html>

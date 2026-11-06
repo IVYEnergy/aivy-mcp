@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aivy Ai+ settings</title>
+<style>/*BASE_CSS*/
+.seg { display: flex; gap: 6px; margin: 4px 0 10px; }
+.seg button { flex: 1; appearance: none; border: 1px solid var(--border); background: var(--surface); color: var(--text2); border-radius: 10px; padding: 8px 6px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; text-transform: capitalize; }
+.seg button.on { background: var(--brand-light); color: var(--brand); border-color: transparent; }
+.lever { display: grid; grid-template-columns: 1fr 120px; gap: 10px; align-items: center; padding: 8px 0; border-top: 1px solid var(--border); }
+.lever:first-child { border-top: 0; }
+.lever .k { font-size: 13px; }
+.lever .k small { display: block; font-size: 11px; color: var(--text3); }
+.lever input[type=range] { width: 100%; accent-color: var(--brand); }
+.lever .num { display: flex; align-items: center; gap: 4px; justify-content: flex-end; }
+.lever input[type=number] { width: 76px; font: inherit; padding: 5px 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); text-align: right; }
+.lever .unit { font-size: 11px; color: var(--text3); }
+.lever.changed .k { color: var(--brand); }
+.switch { width: 40px; height: 22px; border-radius: 11px; background: var(--border); position: relative; cursor: pointer; justify-self: end; }
+.switch.on { background: var(--brand); }
+.switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: left .15s; }
+.switch.on::after { left: 20px; }
+.actions { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
+.state { font-size: 12px; color: var(--text2); } .state.ok { color: var(--brand); } .state.bad { color: var(--danger); }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="card-head">
+    <div class="mark"><svg viewBox="0 0 24 24"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3"/><path d="M1 14h6M9 8h6M17 16h6"/></svg></div>
+    <div><div class="title">Ai+ settings</div><div class="sub" id="sub"></div></div>
+    <div class="spacer"></div><span class="chip" id="active"></span>
+  </div>
+  <div class="card-body">
+    <div class="empty" id="empty">Loading settings…</div>
+    <div id="main" hidden>
+      <div class="seg" id="variants"></div>
+      <div id="levers"></div>
+      <div class="actions"><button class="btn" id="save" disabled>Save</button><button class="btn ghost" id="reset">Reset</button><span class="state" id="state"></span></div>
+    </div>
+  </div>
+  <div class="card-foot"><span>Values are checked against the engine's ranges; if any is out of range nothing changes.</span></div>
+</div>
+<script>/*BRIDGE_JS*/</script>
+<script>
+(function () {
+  var B = window.AivyBridge, $ = function (id) { return document.getElementById(id); };
+  var data = null, variant = null, current = {}, edited = {};
+  function parse(res) { var out = res; if (res && res.content && res.content[0] && res.content[0].text) { try { out = JSON.parse(res.content[0].text); } catch (e) {} } if (out && out.structuredContent) out = out.structuredContent; return out || {}; }
+  function label(k) { return k.replace(/_/g, ' ').replace(/\bc\b/, '¢').replace(/^\w/, function (c) { return c.toUpperCase(); }); }
+  function dirty() { var n = Object.keys(edited).length + (variant !== data.variant ? 1 : 0); $('save').disabled = !n; $('save').textContent = n ? 'Save ' + n + ' change' + (n > 1 ? 's' : '') : 'Save'; }
+  function render() {
+    $('variants').innerHTML = ''; (data.variant_options || [data.variant]).forEach(function (v) { var b = document.createElement('button'); b.textContent = v; b.className = v === variant ? 'on' : ''; b.onclick = function () { variant = v; render(); dirty(); }; $('variants').appendChild(b); });
+    var box = $('levers'); box.innerHTML = '';
+    var specs = data.tunable || {};
+    Object.keys(specs).forEach(function (k) {
+      var s = specs[k], v = edited.hasOwnProperty(k) ? edited[k] : (current[k] !== undefined ? current[k] : s.default);
+      var row = document.createElement('div'); row.className = 'lever' + (edited.hasOwnProperty(k) ? ' changed' : '');
+      if (s.type === 'bool') {
+        row.innerHTML = '<div class="k">' + B.esc(label(k)) + '</div>';
+        var sw = document.createElement('div'); sw.className = 'switch' + (v ? ' on' : ''); sw.onclick = function () { edited[k] = !v; if (edited[k] === current[k]) delete edited[k]; render(); dirty(); }; row.appendChild(sw);
+      } else {
+        var step = s.step || 1, min = s.min !== null && s.min !== undefined ? s.min : 0, max = s.max !== null && s.max !== undefined ? s.max : 100;
+        row.innerHTML = '<div class="k">' + B.esc(label(k)) + '<small>' + B.esc(min + ' to ' + max + (s.unit ? ' ' + s.unit : '')) + ' · default ' + B.esc(s.default) + '</small><input type="range" min="' + min + '" max="' + max + '" step="' + step + '" value="' + B.esc(v) + '"></div><div class="num"><input type="number" min="' + min + '" max="' + max + '" step="' + step + '" value="' + B.esc(v) + '"><span class="unit">' + B.esc(s.unit || '') + '</span></div>';
+        var r = row.querySelector('input[type=range]'), nI = row.querySelector('input[type=number]');
+        var set = function (val) { val = +val; if (isNaN(val)) return; r.value = val; nI.value = val; if (val === (current[k] !== undefined ? current[k] : s.default)) delete edited[k]; else edited[k] = val; row.className = 'lever' + (edited.hasOwnProperty(k) ? ' changed' : ''); dirty(); };
+        r.oninput = function () { set(r.value); }; nI.onchange = function () { set(nI.value); };
+      }
+      box.appendChild(row);
+    });
+    B.resize();
+  }
+  B.onData(function (d) {
+    if (d.error) { $('empty').innerHTML = '<span class="err">' + B.esc(d.error) + '</span>'; return; }
+    data = d; variant = d.variant; current = Object.assign({}, d.settings || {}); edited = {};
+    $('sub').textContent = B.siteLabel(d) + (d.soc_floor_pct !== null && d.soc_floor_pct !== undefined ? ' · SOC floor ' + d.soc_floor_pct + '%' : '');
+    $('active').textContent = d.active ? 'Ai+ running' : 'Ai+ not active'; $('active').className = 'chip ' + (d.active ? 'brand' : 'warn');
+    $('empty').hidden = true; $('main').hidden = false; render(); dirty();
+  });
+  $('reset').onclick = function () { edited = {}; variant = data.variant; render(); dirty(); $('state').textContent = ''; };
+  $('save').onclick = function () {
+    var state = $('state'); state.className = 'state'; state.textContent = 'Saving…'; $('save').disabled = true;
+    var args = { site_id: data.id || data.site_id, settings: edited }; if (variant !== data.variant) args.variant = variant;
+    B.callTool('update_ai_plus', args).then(function (res) {
+      var out = parse(res);
+      if (out.error) { state.className = 'state bad'; state.textContent = out.error + (out.rejected ? ': ' + out.rejected.join('; ') : ''); $('save').disabled = false; return; }
+      current = Object.assign({}, out.settings || current, out.applied || {}); data.variant = out.variant || variant; variant = data.variant; edited = {};
+      state.className = 'state ok'; state.textContent = 'Saved · the engine picks it up on its next tick'; render(); dirty();
+    }).catch(function (e) { state.className = 'state bad'; state.textContent = (e && e.message) || 'Could not save'; $('save').disabled = false; });
+  };
+})();
+</script>
+</body>
+</html>

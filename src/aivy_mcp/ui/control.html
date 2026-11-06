@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aivy energy mode</title>
+<style>/*BASE_CSS*/
+.seg { display: flex; gap: 6px; margin: 6px 0 10px; }
+.seg button { flex: 1; appearance: none; border: 1px solid var(--border); background: var(--surface); color: var(--text2); border-radius: 10px; padding: 9px 6px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.seg button.on { background: var(--brand-light); color: var(--brand); border-color: transparent; }
+.seg small { display: block; font-weight: 400; font-size: 11px; color: var(--text3); }
+.timeline { position: relative; height: 30px; background: var(--fill); border-radius: 8px; overflow: hidden; margin: 2px 0 4px; }
+.timeline .slot { position: absolute; top: 5px; bottom: 5px; border-radius: 4px; opacity: .9; }
+.timeline .slot.charge { background: var(--charge); } .timeline .slot.discharge { background: var(--discharge); }
+.timeline .slot span { position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%); text-align: center; font-size: 10px; color: #fff; font-weight: 600; overflow: hidden; white-space: nowrap; }
+.timeline .now { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--text); opacity: .5; }
+.axis { display: flex; justify-content: space-between; font-size: 11px; color: var(--text3); margin-bottom: 8px; }
+.revert { font-size: 12px; color: var(--warning); margin: 0 0 8px; }
+label { display: block; font-size: 12px; color: var(--text3); margin: 8px 0 4px; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+input[type=number], select { width: 100%; font: inherit; padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--text); }
+input[type=range] { width: 100%; accent-color: var(--brand); }
+.val { font-size: 12px; color: var(--text2); text-align: right; }
+.actions { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
+.state { font-size: 12px; color: var(--text2); } .state.ok { color: var(--brand); } .state.bad { color: var(--danger); }
+.floor { font-size: 12px; color: var(--text3); }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="card-head">
+    <div class="mark"><svg viewBox="0 0 24 24"><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/><circle cx="12" cy="12" r="5"/></svg></div>
+    <div><div class="title">Energy mode</div><div class="sub" id="sub"></div></div>
+    <div class="spacer"></div>
+    <span class="chip brand" id="modechip"></span>
+  </div>
+  <div class="card-body">
+    <div class="empty" id="empty">Reading the mode…</div>
+    <div id="main" hidden>
+      <div class="timeline" id="tl"></div>
+      <div class="axis"><span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>24:00</span></div>
+      <div class="revert" id="revert" hidden></div>
+      <div class="seg">
+        <button data-mode="selfConsumption">Self-use<small>inverter default</small></button>
+        <button data-mode="amber_smart">Ai+<small>trades on prices</small></button>
+        <button data-mode="forced">Manual<small>charge or discharge now</small></button>
+      </div>
+      <div id="manual" hidden>
+        <div class="grid2">
+          <div><label>Action</label><select id="action"><option value="charge">Charge</option><option value="discharge">Discharge</option></select></div>
+          <div><label>For</label><select id="dur"><option value="30">30 min</option><option value="60">1 hour</option><option value="120" selected>2 hours</option><option value="240">4 hours</option><option value="480">8 hours</option></select></div>
+        </div>
+        <label>Power <span class="val" id="pw-val"></span></label><input type="range" id="pw" min="500" max="10000" step="100" value="5000">
+        <label><span id="soc-label">Charge to</span> <span class="val" id="soc-val"></span></label><input type="range" id="soc" min="5" max="100" step="5" value="90">
+      </div>
+      <div class="actions"><button class="btn" id="apply">Apply</button><span class="state" id="state"></span></div>
+      <div class="floor" id="floor"></div>
+    </div>
+  </div>
+  <div class="card-foot"><span>Manual mode always hands back to the previous mode when its time is up. The SOC floor and export limits stay in force.</span></div>
+</div>
+<script>/*BRIDGE_JS*/</script>
+<script>
+(function () {
+  var B = window.AivyBridge, $ = function (id) { return document.getElementById(id); };
+  var LABEL = { selfConsumption: 'Self-use', amber_smart: 'Ai+', forced: 'Manual' };
+  var data = null, chosen = null;
+  function mins(hhmm) { var p = (hhmm || '00:00').split(':'); return (+p[0]) * 60 + (+p[1]); }
+  function drawSlots(slots) {
+    var tl = $('tl'); tl.innerHTML = '';
+    (slots || []).forEach(function (s) {
+      var a = mins(s.start), b = mins(s.end); if (b <= a) b += 1440;
+      [[a, Math.min(b, 1440)], [0, Math.max(0, b - 1440)]].forEach(function (seg) {
+        if (seg[1] <= seg[0]) return;
+        var el = document.createElement('div'); el.className = 'slot ' + s.type;
+        el.style.left = (seg[0] / 1440 * 100) + '%'; el.style.width = ((seg[1] - seg[0]) / 1440 * 100) + '%';
+        el.innerHTML = '<span>' + B.esc(s.type === 'charge' ? 'charge' : 'discharge') + (s.power ? ' ' + B.kw(s.power, 1) : '') + '</span>'; tl.appendChild(el);
+      });
+    });
+    var n = new Date(), now = document.createElement('div'); now.className = 'now'; now.style.left = ((n.getHours() * 60 + n.getMinutes()) / 1440 * 100) + '%'; tl.appendChild(now);
+  }
+  function pick(mode) {
+    chosen = mode;
+    document.querySelectorAll('.seg button').forEach(function (b) { b.className = b.dataset.mode === mode ? 'on' : ''; });
+    $('manual').hidden = mode !== 'forced';
+    $('apply').disabled = mode === data.energy_mode && mode !== 'forced';
+    $('apply').textContent = mode === 'forced' ? 'Start now' : mode === data.energy_mode ? 'Current mode' : 'Switch to ' + LABEL[mode];
+    B.resize();
+  }
+  function sync() { $('pw-val').textContent = B.kw(+$('pw').value, 1); $('soc-val').textContent = $('soc').value + '%'; $('soc-label').textContent = $('action').value === 'charge' ? 'Charge to' : 'Stop at'; }
+  ['pw', 'soc', 'action'].forEach(function (id) { $(id).addEventListener('input', sync); $(id).addEventListener('change', sync); });
+  document.querySelectorAll('.seg button').forEach(function (b) { b.onclick = function () { pick(b.dataset.mode); }; });
+  B.onData(function (d) {
+    if (d.error) { $('empty').innerHTML = '<span class="err">' + B.esc(d.error) + '</span>'; return; }
+    data = d; $('empty').hidden = true; $('main').hidden = false;
+    $('sub').textContent = B.siteLabel(d) + (d.variant ? ' · engine ' + d.variant : '');
+    $('modechip').textContent = LABEL[d.energy_mode] || d.energy_mode;
+    drawSlots(d.time_slots);
+    if (d.reverts_at) { $('revert').hidden = false; $('revert').textContent = 'Hands back to ' + (LABEL[d.reverts_to] || d.reverts_to) + ' at ' + new Date(d.reverts_at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }); } else { $('revert').hidden = true; }
+    $('floor').textContent = d.soc_floor_pct !== null && d.soc_floor_pct !== undefined ? 'SOC floor ' + d.soc_floor_pct + '%' : '';
+    pick(d.energy_mode); sync(); B.resize();
+  });
+  $('apply').onclick = function () {
+    var btn = $('apply'), state = $('state'); btn.disabled = true; state.className = 'state'; state.textContent = 'Applying…';
+    var args = { site_id: data.id || data.site_id, mode: chosen };
+    if (chosen === 'forced') {
+      args.action = $('action').value; args.power_w = +$('pw').value; args.duration_minutes = +$('dur').value;
+      if (args.action === 'charge') args.target_soc = +$('soc').value; else args.stop_soc = +$('soc').value;
+    } else { args.duration_minutes = 0; }
+    B.callTool('set_energy_mode', args).then(function (res) {
+      var out = res; if (res && res.content && res.content[0] && res.content[0].text) { try { out = JSON.parse(res.content[0].text); } catch (e) {} } if (out && out.structuredContent) out = out.structuredContent;
+      if (out && out.error) { state.className = 'state bad'; state.textContent = out.error; btn.disabled = false; return; }
+      state.className = 'state ok'; state.textContent = 'Applied' + (out && out.reverts_at ? ' · hands back ' + new Date(out.reverts_at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) : '');
+      if (out && out.energy_mode) { data.energy_mode = out.energy_mode; data.time_slots = out.time_slots || []; data.reverts_at = out.reverts_at; data.reverts_to = out.reverts_to; $('modechip').textContent = LABEL[out.energy_mode] || out.energy_mode; drawSlots(data.time_slots); if (out.reverts_at) { $('revert').hidden = false; $('revert').textContent = 'Hands back to ' + (LABEL[out.reverts_to] || out.reverts_to) + ' at ' + new Date(out.reverts_at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }); } pick(out.energy_mode); }
+    }).catch(function (e) { state.className = 'state bad'; state.textContent = (e && e.message) || 'Could not apply'; btn.disabled = false; });
+  };
+})();
+</script>
+</body>
+</html>

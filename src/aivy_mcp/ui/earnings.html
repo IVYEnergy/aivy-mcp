@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aivy earnings</title>
+<style>/*BASE_CSS*/
+.headline { display: flex; align-items: baseline; gap: 10px; margin: 6px 0 10px; }
+.headline .big { font-size: 34px; font-weight: 700; letter-spacing: -1px; line-height: 1; }
+.headline .big.neg { color: var(--danger); } .headline .big.pos { color: var(--brand); }
+.headline .what { color: var(--text2); font-size: 13px; }
+.tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 10px; }
+.tile { background: var(--fill); border-radius: 10px; padding: 8px 10px; }
+.tile .k { font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: .4px; }
+.tile .v { font-size: 15px; font-weight: 600; margin-top: 2px; }
+.chart svg { width: 100%; height: 130px; display: block; }
+.legend { display: flex; gap: 14px; font-size: 11px; color: var(--text3); margin-top: 6px; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+.note { font-size: 12px; color: var(--text3); margin-top: 8px; }
+.note.warn { color: var(--warning); }
+@media (max-width: 420px) { .tiles { grid-template-columns: 1fr 1fr; } }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="card-head">
+    <div class="mark"><svg viewBox="0 0 24 24"><path d="M12 2v20M17 6.5a4 4 0 0 0-4-2.5H11a3.5 3.5 0 0 0 0 7h2a3.5 3.5 0 0 1 0 7h-2a4 4 0 0 1-4-2.5"/></svg></div>
+    <div><div class="title">Earnings</div><div class="sub" id="sub"></div></div>
+    <div class="spacer"></div><span class="chip" id="cov"></span>
+  </div>
+  <div class="card-body">
+    <div class="empty" id="empty">Adding it up…</div>
+    <div id="main" hidden>
+      <div class="headline"><span class="big" id="net"></span><span class="what" id="what">net for the day</span></div>
+      <div class="tiles">
+        <div class="tile"><div class="k">Earned</div><div class="v" id="earned"></div></div>
+        <div class="tile"><div class="k">Cost</div><div class="v" id="cost"></div></div>
+        <div class="tile"><div class="k">Exported</div><div class="v" id="exp"></div></div>
+        <div class="tile"><div class="k">Imported</div><div class="v" id="imp"></div></div>
+      </div>
+      <div class="chart"><svg id="svg" viewBox="0 0 560 130" preserveAspectRatio="none"></svg></div>
+      <div class="legend"><span><i style="background:var(--brand)"></i>earned</span><span><i style="background:var(--info)"></i>cost</span></div>
+      <div class="note" id="note"></div>
+    </div>
+  </div>
+  <div class="card-foot"><span>Estimated from the inverter's power samples at Amber's actual prices; not the bill.</span></div>
+</div>
+<script>/*BRIDGE_JS*/</script>
+<script>
+(function () {
+  var B = window.AivyBridge, $ = function (id) { return document.getElementById(id); };
+  var NS = 'http://www.w3.org/2000/svg';
+  function el(tag, attrs, text) { var e = document.createElementNS(NS, tag); for (var k in attrs) e.setAttribute(k, attrs[k]); if (text !== undefined) e.textContent = text; return e; }
+  B.onData(function (d) {
+    if (d.error) { $('empty').innerHTML = '<span class="err">' + B.esc(d.error) + (d.gap ? ' (' + B.esc(d.gap) + ')' : '') + '</span>'; return; }
+    var t = (d.window && d.window.net_dollars !== undefined) ? d.window : (d.totals || {});
+    $('empty').hidden = true; $('main').hidden = false;
+    $('sub').textContent = (d.date || '') + (d.window ? ' · ' + d.window.start + '–' + d.window.end : '') + (d.timezone ? ' · ' + d.timezone : '');
+    var net = t.net_dollars || 0; $('net').textContent = (net < 0 ? '-' : '') + B.money(Math.abs(net)); $('net').className = 'big ' + (net < 0 ? 'neg' : 'pos');
+    $('what').textContent = d.window ? 'net in the window' : 'net for the day';
+    $('earned').textContent = B.money(t.export_earned_dollars); $('cost').textContent = B.money(t.import_cost_dollars);
+    $('exp').textContent = (t.export_kwh !== undefined ? t.export_kwh : '--') + ' kWh'; $('imp').textContent = (t.import_kwh !== undefined ? t.import_kwh : '--') + ' kWh';
+    var cov = d.coverage || {}; var pct = typeof cov.energy_coverage === 'number' ? cov.energy_coverage : d.energy_coverage;
+    $('cov').textContent = typeof pct === 'number' ? Math.round(pct * 100) + '% of the day' : ''; $('cov').className = 'chip ' + (typeof pct === 'number' && pct < .9 ? 'warn' : '');
+    var hours = d.hourly || []; var svg = $('svg'); while (svg.firstChild) svg.removeChild(svg.firstChild);
+    if (hours.length) {
+      var W = 560, H = 130, L = 30, T = 6, Bm = 18, n = hours.length, bw = (W - L - 6) / n;
+      var max = Math.max(0.01, Math.max.apply(null, hours.map(function (h) { return Math.max(h.export_earned_dollars || 0, h.import_cost_dollars || 0); })));
+      var y = function (v) { return T + (H - T - Bm) * (1 - v / max); }, y0 = y(0);
+      svg.appendChild(el('line', { x1: L, x2: W - 6, y1: y0, y2: y0, stroke: 'var(--border)' }));
+      svg.appendChild(el('text', { x: L - 4, y: y(max) + 4, 'text-anchor': 'end', 'font-size': 10, fill: 'var(--text3)' }, '$' + max.toFixed(1)));
+      hours.forEach(function (h, i) {
+        var x = L + i * bw + 1, w = Math.max(2, bw / 2 - 1);
+        if (h.export_earned_dollars) svg.appendChild(el('rect', { x: x, y: y(h.export_earned_dollars), width: w, height: y0 - y(h.export_earned_dollars), fill: 'var(--brand)', rx: 1.5 }));
+        if (h.import_cost_dollars) svg.appendChild(el('rect', { x: x + w + 1, y: y(h.import_cost_dollars), width: w, height: y0 - y(h.import_cost_dollars), fill: 'var(--info)', rx: 1.5 }));
+        if (i % Math.ceil(n / 6) === 0) svg.appendChild(el('text', { x: x + bw / 2, y: H - 5, 'text-anchor': 'middle', 'font-size': 10, fill: 'var(--text3)' }, h.hour));
+      });
+    }
+    var notes = []; if (d.note) notes.push(d.note); if (d.history_note) notes.push(d.history_note); if (cov.note) notes.push(cov.note);
+    $('note').textContent = notes.join(' '); $('note').className = 'note' + (d.gap ? ' warn' : '');
+    B.resize();
+  });
+})();
+</script>
+</body>
+</html>

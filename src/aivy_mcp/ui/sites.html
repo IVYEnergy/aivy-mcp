@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aivy sites</title>
+<style>/*BASE_CSS*/
+.list { list-style: none; margin: 2px 0 0; padding: 0; }
+.list li { display: grid; grid-template-columns: 10px 1fr auto auto; gap: 10px; align-items: center; padding: 10px 0; border-top: 1px solid var(--border); }
+.list li:first-child { border-top: 0; }
+.on { width: 8px; height: 8px; border-radius: 50%; background: var(--brand); } .off { width: 8px; height: 8px; border-radius: 50%; background: var(--text3); }
+.n { font-weight: 600; font-size: 14px; } .n small { display: block; font-weight: 400; font-size: 11px; color: var(--text3); }
+.p { font-size: 13px; color: var(--text2); min-width: 64px; text-align: right; }
+.warn { font-size: 12px; color: var(--warning); margin-top: 8px; }
+.btn.sm { padding: 6px 10px; font-size: 12px; }
+.mini { grid-column: 2 / -1; font-size: 12px; color: var(--text2); }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="card-head">
+    <div class="mark"><svg viewBox="0 0 24 24"><path d="M3 11.5 12 4l9 7.5"/><path d="M5 10v10h14V10"/></svg></div>
+    <div><div class="title">Your sites</div><div class="sub" id="sub"></div></div>
+  </div>
+  <div class="card-body">
+    <div class="empty" id="empty">Loading sites…</div>
+    <ul class="list" id="list" hidden></ul>
+    <div class="warn" id="warn"></div>
+  </div>
+  <div class="card-foot"><span>Demo sites are shared replay data, read-only.</span></div>
+</div>
+<script>/*BRIDGE_JS*/</script>
+<script>
+(function () {
+  var B = window.AivyBridge, $ = function (id) { return document.getElementById(id); };
+  function parse(res) { var out = res; if (res && res.content && res.content[0] && res.content[0].text) { try { out = JSON.parse(res.content[0].text); } catch (e) {} } if (out && out.structuredContent) out = out.structuredContent; return out || {}; }
+  B.onData(function (d) {
+    if (d.error) { $('empty').innerHTML = '<span class="err">' + B.esc(d.error) + '</span>'; return; }
+    var sites = d.sites || [];
+    if (!sites.length) { $('empty').textContent = 'No sites yet. Ask me to connect your system.'; return; }
+    $('empty').hidden = true; $('list').hidden = false;
+    var mine = sites.filter(function (s) { return !s.demo; }).length;
+    $('sub').textContent = mine + ' site' + (mine === 1 ? '' : 's') + (sites.length > mine ? ' · ' + (sites.length - mine) + ' demo' : '');
+    $('list').innerHTML = sites.map(function (s, i) { return '<li><div class="' + (s.online ? 'on' : 'off') + '"></div><div class="n">' + B.esc(s.name || s.id) + (s.demo ? ' <span class="chip" style="font-size:10px">demo</span>' : '') + '<small>' + B.esc(s.id) + '</small></div><div class="p">' + (s.current_power_w !== null && s.current_power_w !== undefined ? B.kw(s.current_power_w) : '') + '</div><button class="btn ghost sm" data-i="' + i + '">Status</button><div class="mini" id="mini' + i + '"></div></li>'; }).join('');
+    $('list').querySelectorAll('button').forEach(function (b) {
+      b.onclick = function () { var s = sites[+b.dataset.i], mini = $('mini' + b.dataset.i); b.disabled = true; mini.textContent = 'Reading…';
+        B.callTool('get_status', { site_id: s.id }).then(function (res) { var o = parse(res); b.disabled = false; if (o.error) { mini.innerHTML = '<span class="err">' + B.esc(o.error) + '</span>'; return; }
+          mini.textContent = 'SOC ' + (o.soc_pct !== null && o.soc_pct !== undefined ? Math.round(o.soc_pct) + '%' : '--') + ' · solar ' + B.kw(o.pv_w) + ' · home ' + B.kw(o.load_w) + ' · grid ' + (o.grid_w > 20 ? 'exporting ' : o.grid_w < -20 ? 'importing ' : '') + B.kw(o.grid_w) + ' · battery ' + (o.battery_w > 20 ? 'charging ' : o.battery_w < -20 ? 'discharging ' : '') + B.kw(o.battery_w); B.resize(); }).catch(function () { b.disabled = false; mini.textContent = 'Could not read.'; }); };
+    });
+    $('warn').textContent = (d.warnings || []).join(' · '); B.resize();
+  });
+})();
+</script>
+</body>
+</html>
