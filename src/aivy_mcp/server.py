@@ -2,7 +2,8 @@
 
 Run with `uvx aivy-mcp` (stdio). Configuration by environment:
 
-    AIVY_API_KEY   personal key from the Aivy app (required)
+    AIVY_API_KEY   personal key (optional: without one, register_account /
+                   sign_in create and store a key from the chat)
     AIVY_API_URL   API base, default https://bridge.ivyenergy.com.au/v1
 
 Tool descriptions are the contract the model reads, so they say what a
@@ -21,6 +22,7 @@ try:  # mcp 2.x
 except ModuleNotFoundError:  # mcp 1.x
     from mcp.server.fastmcp import FastMCP as _Server
 
+from aivy_mcp import __version__
 from aivy_mcp.client import NO_KEY_MESSAGE, AivyClient, AivyError, save_key
 from aivy_mcp.ui import UI_URIS, UI_URIS_BY_NAME, render_template
 
@@ -455,7 +457,19 @@ if apps is not None:
         apps.add_html_resource(_uri, render_template(_name), name=f"aivy-{_name}-card",
                                title=f"Aivy {_name} card", prefers_border=True)
 
-mcp = _Server("aivy", instructions=_INSTRUCTIONS, **({"extensions": [apps]} if apps is not None else {}))
+def _server_kwargs() -> dict[str, Any]:
+    """Constructor options the installed SDK understands (2.x reports version
+    and website in serverInfo; 1.x has neither)."""
+    import inspect
+    accepted = inspect.signature(_Server.__init__).parameters
+    wanted = {"instructions": _INSTRUCTIONS, "version": __version__,
+              "website_url": "https://github.com/IVYEnergy/aivy-mcp"}
+    if apps is not None:
+        wanted["extensions"] = [apps]
+    return {k: v for k, v in wanted.items() if k in accepted}
+
+
+mcp = _Server("aivy", **_server_kwargs())
 for _fn, _kwargs in _PLAIN_TOOLS:
     mcp.tool(**_kwargs)(_fn)
 

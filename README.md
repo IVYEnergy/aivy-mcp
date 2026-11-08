@@ -128,7 +128,7 @@ the playbook, the tool descriptions or the model.
 ## Cards in chat
 
 Hosts that render [MCP Apps](https://github.com/modelcontextprotocol/ext-apps)
-(and ChatGPT through its Apps SDK) show three of the tools as cards instead
+(and ChatGPT through its Apps SDK) show thirteen of the tools as cards instead
 of text, in the same style as the Aivy mobile app, light and dark:
 
 | Tool | Card |

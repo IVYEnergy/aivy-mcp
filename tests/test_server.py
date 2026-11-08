@@ -228,3 +228,19 @@ def test_status_card_data_carries_the_site_name_when_known(monkeypatch):
     assert isinstance(out, dict) and out["name"] == "Home" and out["soc_pct"] == 55
     plan = asyncio.run(server.plan_best_price_discharge("sungrow:1"))
     assert plan["site_id"] == "sungrow:1"
+
+
+def test_server_reports_the_package_version_and_the_readme_counts_the_cards():
+    from aivy_mcp import __version__
+    from aivy_mcp.ui import UI_URIS_BY_NAME
+    from pathlib import Path
+    if hasattr(server.mcp, "version"):  # mcp 2.x puts it in initialize's serverInfo
+        assert server.mcp.version == __version__
+    readme = (Path(__file__).resolve().parents[1] / "README.md").read_text(encoding="utf-8")
+    tools = asyncio.run(server.mcp.list_tools())
+    with_card = sum(1 for t in tools if (t.meta or {}).get("openai/outputTemplate"))
+    assert with_card == 13 and len(UI_URIS_BY_NAME) == 12
+    assert "thirteen of the tools as cards" in readme
+    for t in tools:
+        if (t.meta or {}).get("openai/outputTemplate"):
+            assert f"`{t.name}`" in readme, f"README card table lacks {t.name}"
