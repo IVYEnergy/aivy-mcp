@@ -54,7 +54,19 @@
         if (hc.theme) setTheme(hc.theme);
         send({ jsonrpc: '2.0', method: 'ui/notifications/initialized' });
       }).catch(function () {});
-    B.callTool = function (name, args) { return request('tools/call', { name: name, arguments: args }); };
+    /* Some hosts mount the card without a tool-call bridge (Claude Desktop's
+       Code tab, anthropics/claude-ai-mcp#1181): the call fails with "IPC not
+       available for MCP tool call" before it reaches the server. Say what
+       the person can do instead of showing the raw message. */
+    function friendly(err) {
+      var msg = (err && (err.message || (err.data && err.data.message))) || '';
+      if (/IPC not available/i.test(msg)) {
+        var e = new Error('This chat app cannot run card buttons here. Ask the assistant to do it in the chat instead, or use the web page.');
+        e.code = 'host-no-ipc'; return e;
+      }
+      return err instanceof Error ? err : new Error(msg || 'The call failed');
+    }
+    B.callTool = function (name, args) { return request('tools/call', { name: name, arguments: args }).catch(function (e) { throw friendly(e); }); };
     B.openLink = function (url) { return request('ui/open-link', { url: url }); };
     B.resize = function () { send({ jsonrpc: '2.0', method: 'ui/notifications/size-changed', params: { width: document.documentElement.scrollWidth, height: height() } }); };
   } else {
