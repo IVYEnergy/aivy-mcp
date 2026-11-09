@@ -27,7 +27,7 @@
 <div class="card">
   <div class="card-head">
     <div class="mark"><svg viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg></div>
-    <div><div class="title" id="title">Strategy</div><div class="sub" id="sub"></div></div>
+    <div><div class="title" id="title">Custom strategy</div><div class="sub" id="sub"></div></div>
     <span class="chip" id="chip" style="margin-left:auto" hidden></span>
   </div>
   <div class="card-body">
@@ -52,6 +52,7 @@
   function parse(res) { var out = res; if (res && res.content && res.content[0] && res.content[0].text) { try { out = JSON.parse(res.content[0].text); } catch (e) {} } if (out && out.structuredContent) out = out.structuredContent; return out || {}; }
   function hhmm(iso) { var d = new Date(iso); return isNaN(d) ? '' : d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }); }
   function lease(min) { if (min === undefined || min === null) return ''; if (min >= 1440) { var d = Math.round(min / 144) / 10; return d + ' day' + (d === 1 ? '' : 's'); } if (min >= 60) { var h = Math.round(min / 6) / 10; return h + ' h'; } return min + ' min'; }
+  function modeName(m) { if (!m || !m.energy_mode) return ''; var names = { amber_smart: 'Ai+', selfConsumption: 'self-consumption', forced: 'a manual schedule', em6: 'EM6', microgrid: 'microgrid' }; var n = names[m.energy_mode] || m.energy_mode; return m.energy_mode === 'amber_smart' && m.variant ? n + ' (' + m.variant + ')' : n; }
   function ruleText(r) { if (r.text) { var i = r.text.indexOf(' -> '); return i > 0 ? '<span class="cond">' + B.esc(r.text.slice(0, i)) + '</span> <span class="act">' + B.esc(r.text.slice(i + 4)) + '</span>' : B.esc(r.text); } return B.esc((r.then && r.then.action) || ''); }
   function readings(s) { if (!s) return ''; var p = []; if (s.soc !== null && s.soc !== undefined) p.push('SOC ' + Math.round(s.soc) + '%'); if (s.import_price !== null && s.import_price !== undefined) p.push('buy ' + s.import_price + 'c'); if (s.export_price !== null && s.export_price !== undefined) p.push('sell ' + s.export_price + 'c'); if (s.hour !== null && s.hour !== undefined) { var h = Math.floor(s.hour), m = Math.round((s.hour - h) * 60); p.push(('0' + h).slice(-2) + ':' + ('0' + m).slice(-2)); } return p.join(' · '); }
   function render(d) {
@@ -60,13 +61,14 @@
     var st = d.status || 'none', lim = d.limits || {};
     var chip = $('chip'); chip.hidden = false;
     chip.className = 'chip ' + (st === 'active' ? 'brand' : st === 'proposed' ? 'warn' : '');
-    chip.textContent = st === 'active' ? (d.dry_run ? 'running · demo' : 'running') : st === 'proposed' ? 'proposed' : st === 'ended' ? 'ended' : 'none';
-    $('title').textContent = d.name || (d.proposal && d.proposal.name) || 'Strategy';
-    $('sub').textContent = B.siteLabel({ id: d.site_id }) + (st === 'active' ? ' · ' + lease(d.remaining_minutes) + ' left' : st === 'proposed' && d.proposal ? ' · runs ' + lease(d.proposal.duration_minutes || 1440) : '');
+    chip.textContent = st === 'active' ? (d.dry_run ? 'running · demo' : 'running') : st === 'proposed' ? 'proposed' : st === 'ended' ? 'ended' : 'not running';
+    $('title').textContent = d.name || (d.proposal && d.proposal.name) || 'Custom strategy';
+    var cur = modeName(d.current_mode);
+    $('sub').textContent = B.siteLabel({ id: d.site_id }) + (st === 'active' ? ' · ' + lease(d.remaining_minutes) + ' left · replaces ' + (modeName({ energy_mode: d.restore_to }) || 'the previous mode') : st === 'proposed' && d.proposal ? ' · runs ' + lease(d.proposal.duration_minutes || 1440) + (cur ? ' instead of ' + cur : '') : cur ? ' · running ' + cur : '');
     var summary = d.summary || (d.proposal && d.proposal.summary) || '';
     $('summary').hidden = !summary; $('summary').textContent = summary;
     if (st === 'none') { $('rules').innerHTML = ''; $('fallback').textContent = ''; $('now').hidden = true; $('hist').innerHTML = ''; $('actions').hidden = true;
-      $('limits').textContent = 'No strategy on this site yet. Tell me what you want the battery to do and I will write the rules for you to approve.'; B.resize(); return; }
+      $('limits').textContent = (cur ? 'This site runs ' + cur + ' today. ' : '') + 'No custom strategy on top of it. Tell me what you want the battery to do and I will write the rules for you to approve; ' + (cur || 'the current mode') + ' comes back when the strategy ends.'; B.resize(); return; }
     var hit = st === 'proposed' ? (d.would && d.would.rule) : (d.last_action && d.last_action.rule);
     $('rules').innerHTML = (d.rules || []).map(function (r, i) { return '<li' + (hit === i ? ' class="hit"' : '') + '><div>' + ruleText(r) + (r.note ? '<span class="note">' + B.esc(r.note) + '</span>' : '') + '</div></li>'; }).join('');
     $('fallback').textContent = d.fallback ? 'otherwise ' + (d.fallback.text || d.fallback.action) : '';

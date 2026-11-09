@@ -10,6 +10,8 @@ html, body { margin: 0; background: transparent; color: var(--text); font: 14px/
 /* The card fills whatever width the host gives it (Claude Desktop ~780px,
    ChatGPT ~700px, phones the full screen); the body padding keeps text
    measure readable inside. */
+/* hidden must win over a display rule on the same element (.actions { display: flex } etc.) */
+[hidden] { display: none !important; }
 .card { width: 100%; max-width: 100%; margin: 0; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; box-shadow: var(--shadow); overflow: hidden; }
 .card-head { display: flex; align-items: center; gap: 10px; padding: 14px 16px 10px; }
 .mark { width: 28px; height: 28px; border-radius: 8px; background: linear-gradient(135deg, #3E9D47, #9ACB3D); display: grid; place-items: center; flex: none; }

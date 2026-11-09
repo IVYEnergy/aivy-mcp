@@ -25,7 +25,7 @@ await new Promise((r) => server.listen(0, "127.0.0.1", r));
 const port = server.address().port;
 const browser = await chromium.launch();
 for (const theme of ["light", "dark"]) {
-  for (const card of ["status", "plan", "prices", "signup", "control", "connect", "curve", "earnings", "operations", "aiplus", "alerts", "sites", "target", "strategy", "strategy-active"]) {
+  for (const card of ["status", "plan", "prices", "signup", "control", "connect", "curve", "earnings", "operations", "aiplus", "alerts", "sites", "target", "strategy", "strategy-active", "strategy-none"]) {
     const page = await browser.newPage({ viewport: { width: 640, height: 800 } });
     const errors = [];
     page.on("pageerror", (e) => errors.push(String(e)));
