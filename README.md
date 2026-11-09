@@ -1,5 +1,7 @@
 # aivy-mcp
 
+<!-- mcp-name: io.github.IVYEnergy/aivy-mcp -->
+
 An [MCP](https://modelcontextprotocol.io) server that lets your own AI assistant
 (Claude Code, Claude Desktop, ChatGPT, Codex, Cursor, ...) read and control
 **your own** solar + battery system through the

@@ -244,3 +244,21 @@ def test_server_reports_the_package_version_and_the_readme_counts_the_cards():
     for t in tools:
         if (t.meta or {}).get("openai/outputTemplate"):
             assert f"`{t.name}`" in readme, f"README card table lacks {t.name}"
+
+
+def test_registry_manifest_matches_the_package():
+    """server.json is what the MCP Registry publishes; the README carries the
+    ownership token the registry checks on PyPI."""
+    from aivy_mcp import __version__
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1]
+    manifest = json.loads((root / "server.json").read_text(encoding="utf-8"))
+    assert manifest["name"] == "io.github.IVYEnergy/aivy-mcp"
+    assert manifest["version"] == __version__
+    assert len(manifest["description"]) <= 100
+    pkg = manifest["packages"][0]
+    assert pkg["registryType"] == "pypi" and pkg["identifier"] == "aivy-mcp" and pkg["version"] == __version__
+    assert pkg["transport"] == {"type": "stdio"}
+    readme = (root / "README.md").read_text(encoding="utf-8")
+    assert f"mcp-name: {manifest['name']} " in readme or f"mcp-name: {manifest['name']} -->" in readme
+    assert (root / "pyproject.toml").read_text(encoding="utf-8").count(f'version = "{__version__}"') == 1
