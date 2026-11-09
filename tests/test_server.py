@@ -286,3 +286,15 @@ def test_a_key_saved_by_another_process_is_picked_up_without_a_restart(monkeypat
     assert c.has_key
     assert asyncio.run(c.me()) == {"username": "u"}
     assert seen["auth"] == "Bearer aivy_sk_fromcard"
+
+
+def test_the_server_and_every_card_carry_the_aivy_mark():
+    from aivy_mcp.ui import UI_URIS_BY_NAME, render_template, server_icons
+    icons = server_icons()
+    assert [i["mimeType"] for i in icons] == ["image/png", "image/svg+xml"]
+    assert all(i["src"].startswith("data:image/") for i in icons)
+    if hasattr(server.mcp, "icons") and server.mcp.icons is not None:  # mcp 2.x: shown beside the server name
+        assert [str(i.src)[:15] for i in server.mcp.icons] == ["data:image/png;", "data:image/svg+"]
+    for name in UI_URIS_BY_NAME:
+        html = render_template(name)
+        assert "B.logo = 'data:image/png;base64," in html and "/*LOGO*/" not in html, name

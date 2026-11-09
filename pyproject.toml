@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "aivy-mcp"
-version = "0.9.5"
+version = "0.9.6"
 description = "MCP server for the Aivy Developer API: let your AI assistant read and control your own solar + battery system."
 readme = "README.md"
 license = "Apache-2.0"

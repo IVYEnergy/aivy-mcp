@@ -24,7 +24,7 @@ except ModuleNotFoundError:  # mcp 1.x
 
 from aivy_mcp import __version__
 from aivy_mcp.client import NO_KEY_MESSAGE, AivyClient, AivyError, save_key
-from aivy_mcp.ui import UI_URIS, UI_URIS_BY_NAME, render_template
+from aivy_mcp.ui import UI_URIS, UI_URIS_BY_NAME, render_template, server_icons
 
 # Cards in chat (MCP Apps, io.modelcontextprotocol/ui; ChatGPT reads the
 # same resources through its openai/* aliases). The extension needs mcp 2.x;
@@ -462,10 +462,16 @@ def _server_kwargs() -> dict[str, Any]:
     and website in serverInfo; 1.x has neither)."""
     import inspect
     accepted = inspect.signature(_Server.__init__).parameters
-    wanted = {"instructions": _INSTRUCTIONS, "version": __version__,
-              "website_url": "https://github.com/IVYEnergy/aivy-mcp"}
+    wanted: dict[str, Any] = {"instructions": _INSTRUCTIONS, "version": __version__, "title": "Aivy Energy",
+                              "website_url": "https://github.com/IVYEnergy/aivy-mcp"}
     if apps is not None:
         wanted["extensions"] = [apps]
+    if "icons" in accepted:  # the Aivy mark beside the server name, instead of a letter avatar
+        try:
+            from mcp.types import Icon
+            wanted["icons"] = [Icon(src=i["src"], mime_type=i["mimeType"], sizes=i["sizes"]) for i in server_icons()]
+        except Exception:  # noqa: BLE001 — older types module
+            pass
     return {k: v for k, v in wanted.items() if k in accepted}
 
 

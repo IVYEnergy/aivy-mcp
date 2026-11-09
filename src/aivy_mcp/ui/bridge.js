@@ -79,6 +79,19 @@
   if (!B.theme) setTheme(window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
   if (window.ResizeObserver) new ResizeObserver(function () { B.resize(); }).observe(document.documentElement);
 
+  /* Brand: the Aivy mark (inlined by render_template) leads every card footer. */
+  B.logo = '/*LOGO*/';
+  function brand() {
+    if (B.logo.indexOf('data:') !== 0) return;
+    var foots = document.querySelectorAll('.card-foot');
+    for (var i = 0; i < foots.length; i++) {
+      if (foots[i].querySelector('.aivy-logo')) continue;
+      var img = document.createElement('img'); img.className = 'aivy-logo'; img.src = B.logo; img.alt = 'Aivy'; img.width = 16; img.height = 16;
+      foots[i].insertBefore(img, foots[i].firstChild);
+    }
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', brand); else brand();
+
   /* helpers shared by the cards */
   B.kw = function (w, digits) { if (w === null || w === undefined || isNaN(w)) return '--'; var kw = Math.abs(w) / 1000; return kw.toFixed(digits === undefined ? (kw >= 10 ? 1 : 2) : digits) + ' kW'; };
   B.money = function (d) { return d === null || d === undefined ? '--' : '$' + Number(d).toFixed(2); };
