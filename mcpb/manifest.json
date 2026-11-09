@@ -1,0 +1,183 @@
+{
+  "$schema": "https://raw.githubusercontent.com/anthropics/mcpb/main/dist/mcpb-manifest.schema.json",
+  "manifest_version": "0.4",
+  "name": "aivy-mcp",
+  "display_name": "Aivy Energy",
+  "version": "0.9.6",
+  "description": "Read and control your own solar + battery system: Sungrow, Sigenergy, FoxESS, AlphaESS, SolaX.",
+  "long_description": "Ask Claude what your battery is doing, what Amber Electric prices look like, when to sell tonight, and let it set the energy mode or an alert. Sign up or sign in from the chat; the key stays on this computer. Works with every brand Aivy runs. Manual (forced) modes set here are time-boxed and hand back automatically; the engine's SOC floor and export limits cannot be overridden.",
+  "author": {
+    "name": "Ivy Energy",
+    "email": "info@ivyenergy.com.au",
+    "url": "https://www.ivyenergy.com.au/"
+  },
+  "homepage": "https://bridge.ivyenergy.com.au/developers",
+  "documentation": "https://bridge.ivyenergy.com.au/v1/docs",
+  "support": "https://github.com/IVYEnergy/aivy-mcp/issues",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/IVYEnergy/aivy-mcp"
+  },
+  "icon": "icon.png",
+  "server": {
+    "type": "uv",
+    "entry_point": "src/server.py",
+    "mcp_config": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--directory",
+        "${__dirname}",
+        "src/server.py"
+      ],
+      "env": {
+        "AIVY_API_KEY": "${user_config.api_key}"
+      }
+    }
+  },
+  "user_config": {
+    "api_key": {
+      "type": "string",
+      "title": "Aivy API key (optional)",
+      "description": "Leave empty to sign up or sign in from the chat. Or paste a key from https://bridge.ivyenergy.com.au/developer (read only, or read and control).",
+      "sensitive": true,
+      "required": false
+    }
+  },
+  "tools": [
+    {
+      "name": "get_registration_terms",
+      "description": "Whether sign-up is open and the terms of use / privacy policy a new account accepts (version, hash and"
+    },
+    {
+      "name": "list_sites",
+      "description": "List the user's solar + battery sites across vendors. Returns id (vendor:station_id, used by every other"
+    },
+    {
+      "name": "get_status",
+      "description": "Live reading: SOC (%), pv_w, load_w, grid_w (>0 exporting), battery_w (>0 charging). A null channel is one"
+    },
+    {
+      "name": "get_curve",
+      "description": "Power and SOC history. range 1d = 5-minute points for one local day (day = YYYY-MM-DD, default today);"
+    },
+    {
+      "name": "get_earnings",
+      "description": "Energy bought, sold and self-consumed for a day (YYYY-MM-DD, 'today' or 'yesterday'), priced at the actual"
+    },
+    {
+      "name": "get_operations",
+      "description": "What the platform did to the site and why, newest first: each automatic (Ai+) and manual command with its"
+    },
+    {
+      "name": "get_prices",
+      "description": "Amber Electric prices for the site: the current interval and the forecast as import price and feed-in earn"
+    },
+    {
+      "name": "list_vendors",
+      "description": "Every inverter / battery brand Aivy can connect, whether it is available on this deployment, what"
+    },
+    {
+      "name": "list_alerts",
+      "description": "The account's alert rules on a site: what each watches (soc %, import/export price c/kWh, forecast"
+    },
+    {
+      "name": "get_energy_mode",
+      "description": "Current energy mode (selfConsumption | amber_smart = Ai+ | forced), its forced windows, the SOC floor, the"
+    },
+    {
+      "name": "get_ai_plus",
+      "description": "Ai+ (amber_smart) configuration: active or not, engine variant and options, effective settings, and"
+    },
+    {
+      "name": "plan_best_price_discharge",
+      "description": "Propose when to sell: picks the best-paid Amber intervals in the window (HH:MM) for the battery's usable"
+    },
+    {
+      "name": "plan_discharge_to_target",
+      "description": "Propose a steady discharge that lands on target_soc at end (HH:MM, site local), from the real capacity, SOC"
+    },
+    {
+      "name": "register_account",
+      "description": "Create an Aivy account from the chat, step 1 of 2: a verification code is emailed to `email`. Needs no API"
+    },
+    {
+      "name": "verify_registration",
+      "description": "Create an Aivy account from the chat, step 2 of 2: confirms the emailed code, accepts the terms (only pass"
+    },
+    {
+      "name": "sign_in",
+      "description": "Use an existing Aivy account from the chat: creates an API key with the account's username (or email)"
+    },
+    {
+      "name": "get_agent_guide",
+      "description": "The Aivy agent playbook: which tools answer which questions, the rules for writes (confirm first, forced"
+    },
+    {
+      "name": "whoami",
+      "description": "Check the API key: who it belongs to and whether it may control (scope read or control). Without a key"
+    },
+    {
+      "name": "get_site",
+      "description": "Facts about one site: timezone, battery capacity (kWh) and where that figure came from, max charge/discharge"
+    },
+    {
+      "name": "connect_site",
+      "description": "CHANGES THE ACCOUNT (control scope). Confirm with the user before calling."
+    },
+    {
+      "name": "disconnect_site",
+      "description": "CHANGES THE ACCOUNT (control scope). Confirm with the user before calling."
+    },
+    {
+      "name": "create_alert",
+      "description": "Set up a threshold alert: metric soc | import_price | export_price | temperature, operator above | below."
+    },
+    {
+      "name": "delete_alert",
+      "description": "Retire an alert rule (past firings stay in the inbox). Confirm with the user first."
+    },
+    {
+      "name": "get_alert_events",
+      "description": "What fired on the site, newest first: the rule, the value that tripped it, when, how it was delivered and"
+    },
+    {
+      "name": "send_test_alert_email",
+      "description": "Send one test alert email to the account's verified address so the person sees what an alert looks like."
+    },
+    {
+      "name": "set_energy_mode",
+      "description": "CHANGES THE SITE (control scope). Confirm with the user before calling."
+    },
+    {
+      "name": "update_ai_plus",
+      "description": "CHANGES THE SITE (control scope). Confirm with the user before calling."
+    }
+  ],
+  "tools_generated": false,
+  "keywords": [
+    "solar",
+    "battery",
+    "energy",
+    "amber",
+    "sungrow",
+    "sigenergy",
+    "home-energy",
+    "australia"
+  ],
+  "license": "Apache-2.0",
+  "privacy_policies": [
+    "https://bridge.ivyenergy.com.au/privacy"
+  ],
+  "compatibility": {
+    "claude_desktop": ">=0.10.0",
+    "platforms": [
+      "darwin",
+      "win32",
+      "linux"
+    ],
+    "runtimes": {
+      "python": ">=3.10"
+    }
+  }
+}

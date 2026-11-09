@@ -32,6 +32,12 @@ be created from the API itself; see the
 
 ## 2. Add the server
 
+**Claude Desktop, no terminal:** download `aivy-mcp-<version>.mcpb` from the
+[latest release](https://github.com/IVYEnergy/aivy-mcp/releases/latest) and
+open it; Claude Desktop installs it as an extension with the Aivy icon, and
+fetches the server with its own `uv`. Then say "sign me up to Aivy".
+(`mcpb/build.py` builds that file from the released package.)
+
 **One line** (macOS, Linux; installs `uv` if missing, then writes the server
 into every MCP client it finds: Codex, Claude Code, Claude Desktop, Cursor):
 
