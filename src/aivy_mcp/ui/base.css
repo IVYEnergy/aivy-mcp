@@ -7,7 +7,10 @@
   --gold: #F5B041; --charge: #F0B458; --discharge: #22C27E; --idle: #7D848E; --shadow: none; }
 * { box-sizing: border-box; }
 html, body { margin: 0; background: transparent; color: var(--text); font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "PingFang SC", "Noto Sans CJK SC", sans-serif; -webkit-font-smoothing: antialiased; }
-.card { max-width: 560px; margin: 0; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; box-shadow: var(--shadow); overflow: hidden; }
+/* The card fills whatever width the host gives it (Claude Desktop ~780px,
+   ChatGPT ~700px, phones the full screen); the body padding keeps text
+   measure readable inside. */
+.card { width: 100%; max-width: 100%; margin: 0; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; box-shadow: var(--shadow); overflow: hidden; }
 .card-head { display: flex; align-items: center; gap: 10px; padding: 14px 16px 10px; }
 .mark { width: 28px; height: 28px; border-radius: 8px; background: linear-gradient(135deg, #3E9D47, #9ACB3D); display: grid; place-items: center; flex: none; }
 .mark svg { width: 16px; height: 16px; stroke: #fff; fill: none; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
