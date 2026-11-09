@@ -185,7 +185,7 @@ locally: `node tests/ui/shoot.mjs` (needs `playwright`).
 | `connect_site` | **yes** | Link the user's system (serial + NMI, system id, or an OAuth link to open) |
 | `disconnect_site` | **yes** | Remove a site from the account |
 | `get_energy_mode` | no | Mode, windows, pending hand-back |
-| `set_energy_mode` | **yes** | selfConsumption / amber_smart (Ai+) / forced (time-boxed) |
+| `set_energy_mode` | **yes** | selfConsumption / amber_smart (Ai+) / au_forecast_export, au_negative_price, au_smart_energy, au_weather_season (AU-01..04 student strategies) / forced (time-boxed) |
 | `get_ai_plus` | no | Ai+ variant, settings and tunable ranges |
 | `update_ai_plus` | **yes** | Change Ai+ levers or variant |
 | `plan_best_price_discharge` | no | Propose a sell schedule from the forecast |

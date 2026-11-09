@@ -13,12 +13,25 @@ within about a minute and the person pays for the result on their power
 bill. Treat it like driving someone else's car: look first, say what you are
 about to do, wait for the yes, then report what happened.
 
-Three energy modes:
+Seven energy modes:
 
 - `selfConsumption`: the inverter's default. Solar to the house, surplus to
   the battery, then export.
 - `amber_smart` (**Ai+**): Aivy's price-driven engine trades the battery
   against Amber Electric prices. Most users with Amber run this.
+- `au_forecast_export` (**AU-01 Smart export**), `au_negative_price`
+  (**AU-02 Negative price**), `au_smart_energy` (**AU-03 Smart energy**),
+  `au_weather_season` (**AU-04 Weather smart storage**): the AU Ingenuity
+  2026 student strategies, run by the server with the same SOC floor and
+  export limits as Ai+. AU-01 sells evening surplus above a load-forecast
+  reserve at 15c+; AU-02 blocks export while feed-in is negative and sells
+  above a 50% reserve at 15c+; AU-03 uses the battery for the home only when
+  import is 8c+ and never exports; AU-04 sells above a weather- and
+  season-sized reserve at 30c+. All need Amber linked; AU-01 and AU-04 also
+  need a Sungrow or Sigenergy site (load history). `set_energy_mode` answers
+  409 with the reason otherwise; `get_energy_mode` returns the thresholds in
+  force as `settings`. Offer them when the person asks for something other
+  than Ai+ or wants to compare; name them by code and name.
 - `forced`: manual charge/discharge windows. Through the API it is always
   time-boxed; when the time is up the server returns the site to its
   previous mode on its own.

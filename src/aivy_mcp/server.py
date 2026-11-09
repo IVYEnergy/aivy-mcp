@@ -491,7 +491,8 @@ async def end_strategy(site_id: str) -> dict[str, Any]:
 
 @ui_tool(UI_URIS_BY_NAME["control"], invoking="Reading the energy mode", invoked="Energy mode")
 async def get_energy_mode(site_id: str) -> dict[str, Any]:
-    """Current energy mode (selfConsumption | amber_smart = Ai+ | forced), its forced windows, the SOC floor, the
+    """Current energy mode (selfConsumption | amber_smart = Ai+ | au_forecast_export, au_negative_price, au_smart_energy,
+    au_weather_season = the AU-01..04 student strategies | forced), its forced windows, the SOC floor, the
     Ai+ variant and settings when on Ai+, and any pending timed hand-back (reverts_at / reverts_to)."""
     return await _data(_c().energy_mode(site_id), site_id=site_id)
 
@@ -510,7 +511,12 @@ async def set_energy_mode(
 ) -> str:
     """CHANGES THE SITE (control scope). Confirm with the user before calling.
 
-    mode: selfConsumption (inverter default), amber_smart (Ai+, price-driven trading) or forced (manual windows).
+    mode: selfConsumption (inverter default), amber_smart (Ai+, price-driven trading), one of the AU Ingenuity
+    student strategies: au_forecast_export (AU-01 Smart export: sells evening surplus above a load-forecast reserve),
+    au_negative_price (AU-02: blocks export while feed-in is negative, sells above 50% on high prices),
+    au_smart_energy (AU-03: battery serves the home only when import is dear, never exports), au_weather_season
+    (AU-04: sells above a weather- and season-sized reserve), or forced (manual windows). The au_* modes need Amber
+    linked, AU-01 / AU-04 also a Sungrow or Sigenergy site; the server answers 409 with the reason otherwise.
     forced is always time-boxed: duration_minutes (default 240, max 1440); afterwards the server returns the site
     to the mode it had before. Shorthand for forced: action=charge|discharge with power_w and target_soc (charge)
     or stop_soc (discharge) builds one window starting now. Or pass explicit time_slots:

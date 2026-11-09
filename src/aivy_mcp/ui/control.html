@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Aivy energy mode</title>
 <style>/*BASE_CSS*/
-.seg { display: flex; gap: 6px; margin: 6px 0 10px; }
-.seg button { flex: 1; appearance: none; border: 1px solid var(--border); background: var(--surface); color: var(--text2); border-radius: 10px; padding: 9px 6px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.seg { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 10px; }
+.seg button { flex: 1 1 30%; appearance: none; border: 1px solid var(--border); background: var(--surface); color: var(--text2); border-radius: 10px; padding: 9px 6px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
 .seg button.on { background: var(--brand-light); color: var(--brand); border-color: transparent; }
 .seg small { display: block; font-weight: 400; font-size: 11px; color: var(--text3); }
 .timeline { position: relative; height: 30px; background: var(--fill); border-radius: 8px; overflow: hidden; margin: 2px 0 4px; }
@@ -43,6 +43,10 @@ input[type=range] { width: 100%; accent-color: var(--brand); }
       <div class="seg">
         <button data-mode="selfConsumption">Self-use<small>inverter default</small></button>
         <button data-mode="amber_smart">Ai+<small>trades on prices</small></button>
+        <button data-mode="au_forecast_export">AU-01 Smart export<small>evening surplus</small></button>
+        <button data-mode="au_negative_price">AU-02 Negative price<small>no export below 0c</small></button>
+        <button data-mode="au_smart_energy">AU-03 Smart energy<small>battery when grid is dear</small></button>
+        <button data-mode="au_weather_season">AU-04 Weather storage<small>weather-sized reserve</small></button>
         <button data-mode="forced">Manual<small>charge or discharge now</small></button>
       </div>
       <div id="manual" hidden>
@@ -63,7 +67,7 @@ input[type=range] { width: 100%; accent-color: var(--brand); }
 <script>
 (function () {
   var B = window.AivyBridge, $ = function (id) { return document.getElementById(id); };
-  var LABEL = { selfConsumption: 'Self-use', amber_smart: 'Ai+', forced: 'Manual' };
+  var LABEL = { selfConsumption: 'Self-use', amber_smart: 'Ai+', au_forecast_export: 'AU-01 Smart export', au_negative_price: 'AU-02 Negative price', au_smart_energy: 'AU-03 Smart energy', au_weather_season: 'AU-04 Weather storage', forced: 'Manual' };
   var data = null, chosen = null;
   function mins(hhmm) { var p = (hhmm || '00:00').split(':'); return (+p[0]) * 60 + (+p[1]); }
   function drawSlots(slots) {
