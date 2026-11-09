@@ -262,3 +262,27 @@ def test_registry_manifest_matches_the_package():
     readme = (root / "README.md").read_text(encoding="utf-8")
     assert f"mcp-name: {manifest['name']} " in readme or f"mcp-name: {manifest['name']} -->" in readme
     assert (root / "pyproject.toml").read_text(encoding="utf-8").count(f'version = "{__version__}"') == 1
+
+
+def test_a_key_saved_by_another_process_is_picked_up_without_a_restart(monkeypatch, tmp_path):
+    """Claude Desktop runs one server process for the chat and another for a
+    card's own tool calls. The card signs in and saves the key; the chat's
+    process, built without a key, must start using it on its next call."""
+    monkeypatch.setenv("AIVY_HOME", str(tmp_path))
+    monkeypatch.delenv("AIVY_API_KEY", raising=False)
+    seen: dict[str, str | None] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["auth"] = request.headers.get("authorization")
+        return httpx.Response(200, json={"username": "u"})
+
+    c = client_mod.AivyClient(api_url="https://x.test/v1")
+    c._http = httpx.AsyncClient(base_url="https://x.test/v1", transport=httpx.MockTransport(handler))
+    assert not c.has_key
+    with pytest.raises(client_mod.AivyError):
+        asyncio.run(c.me())
+    assert "auth" not in seen, "nothing goes upstream without a key"
+    client_mod.save_key("https://x.test/v1", "aivy_sk_fromcard", username="u")  # the other process
+    assert c.has_key
+    assert asyncio.run(c.me()) == {"username": "u"}
+    assert seen["auth"] == "Bearer aivy_sk_fromcard"

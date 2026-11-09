@@ -81,8 +81,19 @@ class AivyClient:
             headers={"User-Agent": f"aivy-mcp/{_version()}"},
         )
 
+    def _refresh_key(self) -> None:
+        """Pick up a key another process saved since this client was made.
+        Hosts such as Claude Desktop run one server process for the chat and
+        another for a card's own tool calls: the card signs in and saves the
+        key, the chat's process must see it without a restart."""
+        if not self.api_key:
+            saved = load_saved_key(self.api_url)
+            if saved:
+                self.api_key = saved
+
     @property
     def has_key(self) -> bool:
+        self._refresh_key()
         return bool(self.api_key)
 
     def use_key(self, api_key: str) -> None:
@@ -95,6 +106,7 @@ class AivyClient:
                     **kwargs: Any) -> Any:
         headers = dict(kwargs.pop("headers", {}) or {})
         if auth == "key":
+            self._refresh_key()
             if not self.api_key:
                 raise AivyError(NO_KEY_MESSAGE)
             headers["Authorization"] = f"Bearer {self.api_key}"
