@@ -508,6 +508,7 @@ async def set_energy_mode(
     stop_soc: int | None = None,
     time_slots: list[dict] | None = None,
     variant: str | None = None,
+    settings: dict | None = None,
 ) -> str:
     """CHANGES THE SITE (control scope). Confirm with the user before calling.
 
@@ -521,12 +522,14 @@ async def set_energy_mode(
     to the mode it had before. Shorthand for forced: action=charge|discharge with power_w and target_soc (charge)
     or stop_soc (discharge) builds one window starting now. Or pass explicit time_slots:
     [{type, start 'HH:MM', end 'HH:MM', target_soc|stop_soc, power, pace}] in site local time.
-    variant picks the Ai+ engine when mode is amber_smart. The SOC floor and export limits cannot be overridden.
-    Takes effect on the engine's next tick (about a minute)."""
+    variant picks the Ai+ engine when mode is amber_smart. settings, for an au_* mode only, stores that strategy's
+    own numbers with the switch (e.g. {"export_threshold_c": 25, "reserve_soc": 60}; get_energy_mode shows the ones
+    in force, every one has a default from the author, out-of-range values are refused). The SOC floor and export
+    limits cannot be overridden. Takes effect on the engine's next tick (about a minute)."""
     body: dict[str, Any] = {"mode": mode}
     for key, value in (("duration_minutes", duration_minutes), ("action", action), ("power_w", power_w),
                        ("target_soc", target_soc), ("stop_soc", stop_soc), ("time_slots", time_slots),
-                       ("variant", variant)):
+                       ("variant", variant), ("settings", settings)):
         if value is not None:
             body[key] = value
     return await _run(_c().set_energy_mode(site_id, body))

@@ -3,7 +3,7 @@
   "name": "io.github.IVYEnergy/aivy-mcp",
   "title": "Aivy Energy",
   "description": "Read and control your own home solar + battery: Sungrow, Sigenergy, FoxESS, AlphaESS, SolaX.",
-  "version": "0.11.0",
+  "version": "0.11.1",
   "websiteUrl": "https://bridge.ivyenergy.com.au/developers",
   "repository": {
     "url": "https://github.com/IVYEnergy/aivy-mcp",
@@ -14,7 +14,7 @@
       "registryType": "pypi",
       "registryBaseUrl": "https://pypi.org",
       "identifier": "aivy-mcp",
-      "version": "0.11.0",
+      "version": "0.11.1",
       "runtimeHint": "uvx",
       "transport": { "type": "stdio" },
       "environmentVariables": [
