@@ -214,6 +214,22 @@ class AivyClient:
     async def patch_ai_plus(self, site_id: str, variant: str | None, settings: dict) -> dict:
         return await self._call("PATCH", f"/sites/{site_id}/ai-plus", json={"variant": variant, "settings": settings})
 
+    # ── strategy mode (rules written by the AI, run by the server) ──
+    async def strategy(self, site_id: str) -> dict:
+        return await self._call("GET", f"/sites/{site_id}/strategy")
+
+    async def preview_strategy(self, site_id: str, body: dict) -> dict:
+        return await self._call("POST", f"/sites/{site_id}/strategy/preview", json=body)
+
+    async def start_strategy(self, site_id: str, body: dict) -> dict:
+        return await self._call("POST", f"/sites/{site_id}/strategy", json=body)
+
+    async def update_strategy(self, site_id: str, body: dict) -> dict:
+        return await self._call("PUT", f"/sites/{site_id}/strategy", json=body)
+
+    async def end_strategy(self, site_id: str) -> dict:
+        return await self._call("DELETE", f"/sites/{site_id}/strategy")
+
     # ── planning ──
     async def plan_best_price_discharge(self, site_id: str, body: dict) -> dict:
         return await self._call("POST", f"/sites/{site_id}/plans/best-price-discharge", json=body)

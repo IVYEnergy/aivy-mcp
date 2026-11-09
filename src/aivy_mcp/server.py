@@ -406,6 +406,87 @@ async def send_test_alert_email() -> str:
     return await _run(_c().test_alert_email())
 
 
+# ── strategy mode: the AI writes the rules, the server runs them ──
+
+_RULE_SHAPE = ("Each rule is {\"when\": [conditions], \"then\": action, \"note\": \"why\"}. A condition is {\"metric\": soc | "
+               "import_price | export_price | hour, \"operator\": above | below | between, \"value\": n} (between uses "
+               "\"low\" and \"high\"; hour is local time as a decimal, 17.5 = 5:30 pm, low > high wraps midnight). An action is "
+               "{\"action\": charge | discharge | hold | auto, \"power_w\"?, \"target_soc\"? (charge), \"stop_soc\"? (discharge)}. "
+               "Rules are checked in order, first match wins, `fallback` (default auto) applies when none matches. At most 20 "
+               "rules, 4 conditions each.")
+
+
+def _strategy_body(name: str | None, summary: str | None, rules: list[dict], fallback: dict | None,
+                   duration_minutes: int | None) -> dict[str, Any]:
+    body: dict[str, Any] = {"rules": rules}
+    if name is not None:
+        body["name"] = name
+    if summary is not None:
+        body["summary"] = summary
+    if fallback is not None:
+        body["fallback"] = fallback
+    if duration_minutes is not None:
+        body["duration_minutes"] = duration_minutes
+    return body
+
+
+@ui_tool(UI_URIS_BY_NAME["strategy"], invoking="Reading the strategy", invoked="Strategy")
+async def get_strategy(site_id: str) -> dict[str, Any]:
+    """Strategy mode on a site: the AI-written rules running now (name, rules, lease, last action, recent
+    evaluations), status none when there has never been one, or ended with end_reason. `limits` is what the server
+    enforces on every strategy. Hosts render it as a card with a Stop button."""
+    return await _data(_c().strategy(site_id), site_id=site_id)
+
+
+@ui_tool(UI_URIS_BY_NAME["strategy"], invoking="Checking the rules", invoked="Proposed strategy")
+async def preview_strategy(site_id: str, name: str, rules: list[dict], summary: str = "",
+                           fallback: dict | None = None, duration_minutes: int = 1440) -> dict[str, Any]:
+    """Step 1 of strategy mode ("I want to write my own strategy"): YOU write the rules from what the person
+    wants, then call this. It dry-runs them against the site's current readings (nothing starts) and returns which
+    rule would fire. Hosts render the proposal as a card: the rules in plain words, the lease, the limits and a
+    Start button; the person's click is their acceptance and calls start_strategy. Without a card, read the rules
+    back and ask before start_strategy. """ + _RULE_SHAPE + """ duration_minutes is the lease (15 to 10080,
+    default a day): the site returns to its previous mode when it ends."""
+    body = _strategy_body(None, None, rules, fallback, None)
+    out = await _data(_c().preview_strategy(site_id, body), site_id=site_id)
+    out["status"] = "proposed"
+    out["proposal"] = _strategy_body(name, summary, rules, fallback, duration_minutes)
+    return out
+
+
+@ui_tool(UI_URIS_BY_NAME["strategy"], invoking="Starting the strategy", invoked="Strategy started")
+async def start_strategy(site_id: str, name: str, rules: list[dict], accept_risk: bool, summary: str = "",
+                         fallback: dict | None = None, duration_minutes: int = 1440) -> dict[str, Any]:
+    """Step 2 of strategy mode: run the rules on the site (control scope; demo sites run a dry run). Only after the
+    person has seen the rules and said yes: accept_risk=true is that yes, never assume it. The server evaluates the
+    rules every five minutes for the lease, applies each decision through the normal engine (SOC floor and export
+    limits hold), allows at most 3 action changes an hour and none within 15 minutes of the last, treats stale
+    readings as auto, and returns the site to its previous mode when the lease ends, the strategy is stopped or
+    fails, or the mode is changed elsewhere. While it runs, set_energy_mode and update_ai_plus are refused. """ + \
+        _RULE_SHAPE
+    if not accept_risk:
+        return {"error": "the person must see the rules and accept first (preview_strategy shows them)", "site_id": site_id}
+    body = _strategy_body(name, summary, rules, fallback, duration_minutes)
+    body["accept_risk"] = True
+    return await _data(_c().start_strategy(site_id, body), site_id=site_id)
+
+
+@ui_tool(UI_URIS_BY_NAME["strategy"], invoking="Changing the rules", invoked="Strategy updated")
+async def update_strategy_rules(site_id: str, rules: list[dict], summary: str | None = None,
+                                fallback: dict | None = None, duration_minutes: int | None = None) -> dict[str, Any]:
+    """Replace the running strategy's rules (and optionally its fallback, summary or lease from now); evaluated at
+    once. Confirm the new rules with the person first. 404 when none is running. """ + _RULE_SHAPE
+    return await _data(_c().update_strategy(site_id, _strategy_body(None, summary, rules, fallback, duration_minutes)),
+                       site_id=site_id)
+
+
+@ui_tool(UI_URIS_BY_NAME["strategy"], invoking="Stopping the strategy", invoked="Strategy stopped")
+async def end_strategy(site_id: str) -> dict[str, Any]:
+    """Stop the running strategy now; the site goes back to the mode it had before it started. Confirm with the
+    person first unless they asked for it."""
+    return await _data(_c().end_strategy(site_id), site_id=site_id)
+
+
 # ── control ──
 
 @ui_tool(UI_URIS_BY_NAME["control"], invoking="Reading the energy mode", invoked="Energy mode")

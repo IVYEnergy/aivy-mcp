@@ -11,13 +11,13 @@ const here = dirname(fileURLToPath(import.meta.url));
 const out = process.argv[2] || here;
 // Rendered templates come from the package loader, so the test sees exactly what a host gets.
 const rendered = {};
-for (const name of ["status", "plan", "prices", "signup", "control", "connect", "curve", "earnings", "operations", "aiplus", "alerts", "sites"]) {
+for (const name of ["status", "plan", "prices", "signup", "control", "connect", "curve", "earnings", "operations", "aiplus", "alerts", "sites", "strategy"]) {
   rendered[name] = execFileSync("python3", ["-c", `import sys; sys.path.insert(0, ${JSON.stringify(join(here, "../../src"))}); from aivy_mcp.ui import render_template; print(render_template(${JSON.stringify(name)}))`]).toString();
 }
 const server = createServer((req, res) => {
   const url = new URL(req.url, "http://x");
   if (url.pathname === "/host.html") { res.setHeader("content-type", "text/html"); return res.end(readFileSync(join(here, "host.html"))); }
-  const m = /^\/(status|plan|prices|signup|control|connect|curve|earnings|operations|aiplus|alerts|sites)\.html$/.exec(url.pathname);
+  const m = /^\/(status|plan|prices|signup|control|connect|curve|earnings|operations|aiplus|alerts|sites|strategy)\.html$/.exec(url.pathname);
   if (m) { res.setHeader("content-type", "text/html"); return res.end(rendered[m[1]]); }
   res.statusCode = 404; res.end();
 });
@@ -25,7 +25,7 @@ await new Promise((r) => server.listen(0, "127.0.0.1", r));
 const port = server.address().port;
 const browser = await chromium.launch();
 for (const theme of ["light", "dark"]) {
-  for (const card of ["status", "plan", "prices", "signup", "control", "connect", "curve", "earnings", "operations", "aiplus", "alerts", "sites", "target"]) {
+  for (const card of ["status", "plan", "prices", "signup", "control", "connect", "curve", "earnings", "operations", "aiplus", "alerts", "sites", "target", "strategy", "strategy-active"]) {
     const page = await browser.newPage({ viewport: { width: 640, height: 800 } });
     const errors = [];
     page.on("pageerror", (e) => errors.push(String(e)));

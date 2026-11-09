@@ -99,6 +99,7 @@ HTTP API directly. Paste this into the chat:
 - "Make Ai+ a bit more aggressive on exports." (control key)
 - "Connect my Sungrow inverter, serial A2340000001, NMI 2001234567." (control key)
 - "Email me when the battery drops below 20%."
+- "I want to write my own strategy: sell above 40c, charge when import goes negative, hold overnight." (control key; the AI writes the rules, you approve)
 
 ## For agents: the playbook
 
@@ -136,7 +137,7 @@ the playbook, the tool descriptions or the model.
 ## Cards in chat
 
 Hosts that render [MCP Apps](https://github.com/modelcontextprotocol/ext-apps)
-(and ChatGPT through its Apps SDK) show fifteen of the tools as cards instead
+(and ChatGPT through its Apps SDK) show twenty of the tools as cards instead
 of text, in the same style as the Aivy mobile app, light and dark:
 
 | Tool | Card |
@@ -155,6 +156,7 @@ of text, in the same style as the Aivy mobile app, light and dark:
 | `list_alerts` | Alert rules with Delete, and a form to add one; called with the rule the person asked for, the form comes filled in and one click adds it |
 | `create_alert`, `delete_alert` | The same card, already showing the rule just added (marked new) or the remaining rules |
 | `list_sites` | Your sites with a Status button each |
+| `preview_strategy`, `start_strategy`, `get_strategy`, `update_strategy_rules`, `end_strategy` | Strategy mode: the rules the AI wrote in plain words, what they would do right now, the lease and the limits, with Start; then the running strategy with its last action, recent decisions and Stop |
 
 Every card is one self-contained HTML document (no network, no assets), so
 it works under the extension's default content security policy. Hosts
@@ -188,12 +190,17 @@ locally: `node tests/ui/shoot.mjs` (needs `playwright`).
 | `update_ai_plus` | **yes** | Change Ai+ levers or variant |
 | `plan_best_price_discharge` | no | Propose a sell schedule from the forecast |
 | `plan_discharge_to_target` | no | Propose a discharge that lands on a SOC at a time |
+| `get_strategy`, `preview_strategy` | no | Strategy mode: what is running; dry-run AI-written rules against the readings |
+| `start_strategy`, `update_strategy_rules`, `end_strategy` | **yes** | Run, change or stop the AI-written rules; the server keeps the limits and hands the site back when it ends |
 
 ## What the server enforces, whatever the assistant does
 
 - A key sees only its owner's sites; writes need the control scope.
 - A forced (manual) mode set through the API **always reverts** to the previous
   mode after `duration_minutes` (default 4 h, max 24 h).
+- A strategy written by the AI runs on a lease (default a day, max a week),
+  may change the action at most three times an hour, treats stale readings
+  as `auto`, and hands the site back to its previous mode when it ends.
 - The SOC floor and grid export limits cannot be overridden.
 - Every call is recorded with the key id and client; keys can be revoked in
   the app at any time and stop working immediately.

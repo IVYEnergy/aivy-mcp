@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aivy strategy</title>
+<style>/*BASE_CSS*/
+.summary { font-size: 13px; color: var(--text2); margin: 0 0 10px; line-height: 1.45; }
+.rules { list-style: none; margin: 0 0 8px; padding: 0; counter-reset: r; }
+.rules li { display: grid; grid-template-columns: 22px 1fr; gap: 8px; padding: 7px 0; border-top: 1px solid var(--border); font-size: 13px; }
+.rules li:first-child { border-top: 0; }
+.rules li::before { counter-increment: r; content: counter(r); width: 20px; height: 20px; border-radius: 50%; background: var(--fill); color: var(--text2); font-size: 11px; display: grid; place-items: center; }
+.rules li.hit::before { background: var(--brand); color: #fff; }
+.rules .cond { color: var(--text2); } .rules .act { font-weight: 600; } .rules .note { display: block; font-size: 11px; color: var(--text3); margin-top: 2px; }
+.fallback { font-size: 12px; color: var(--text3); margin: 0 0 10px 30px; }
+.now { background: var(--fill); border-radius: 12px; padding: 10px 12px; margin: 10px 0; font-size: 13px; }
+.now b { font-weight: 600; } .now .why { color: var(--text2); font-size: 12px; margin-top: 3px; } .now .read { color: var(--text3); font-size: 11px; margin-top: 4px; }
+.hist { list-style: none; margin: 6px 0 0; padding: 0; font-size: 11px; color: var(--text3); }
+.hist li { display: flex; gap: 8px; padding: 2px 0; } .hist .t { min-width: 40px; } .hist .a { min-width: 64px; color: var(--text2); font-weight: 600; }
+.limits { font-size: 11px; color: var(--text3); margin: 8px 0 0; line-height: 1.5; }
+.actions { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
+.btn.stop { background: var(--fill); color: var(--danger); }
+.state { font-size: 12px; color: var(--text2); } .state.ok { color: var(--brand); } .state.bad { color: var(--danger); }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="card-head">
+    <div class="mark"><svg viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg></div>
+    <div><div class="title" id="title">Strategy</div><div class="sub" id="sub"></div></div>
+    <span class="chip" id="chip" style="margin-left:auto" hidden></span>
+  </div>
+  <div class="card-body">
+    <div class="empty" id="empty">Loading…</div>
+    <div id="main" hidden>
+      <p class="summary" id="summary" hidden></p>
+      <ol class="rules" id="rules"></ol>
+      <div class="fallback" id="fallback"></div>
+      <div class="now" id="now" hidden></div>
+      <ul class="hist" id="hist"></ul>
+      <div class="limits" id="limits"></div>
+      <div class="actions" id="actions" hidden><button class="btn" id="go"></button><span class="state" id="state"></span></div>
+    </div>
+  </div>
+  <div class="card-foot"><span>The server keeps the SOC floor and export limits; the site returns to its previous mode when the strategy ends.</span></div>
+</div>
+<script>/*BRIDGE_JS*/</script>
+<script>
+(function () {
+  var B = window.AivyBridge, $ = function (id) { return document.getElementById(id); };
+  var site = null, proposal = null;
+  function parse(res) { var out = res; if (res && res.content && res.content[0] && res.content[0].text) { try { out = JSON.parse(res.content[0].text); } catch (e) {} } if (out && out.structuredContent) out = out.structuredContent; return out || {}; }
+  function hhmm(iso) { var d = new Date(iso); return isNaN(d) ? '' : d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }); }
+  function lease(min) { if (min === undefined || min === null) return ''; if (min >= 1440) { var d = Math.round(min / 144) / 10; return d + ' day' + (d === 1 ? '' : 's'); } if (min >= 60) { var h = Math.round(min / 6) / 10; return h + ' h'; } return min + ' min'; }
+  function ruleText(r) { if (r.text) { var i = r.text.indexOf(' -> '); return i > 0 ? '<span class="cond">' + B.esc(r.text.slice(0, i)) + '</span> <span class="act">' + B.esc(r.text.slice(i + 4)) + '</span>' : B.esc(r.text); } return B.esc((r.then && r.then.action) || ''); }
+  function readings(s) { if (!s) return ''; var p = []; if (s.soc !== null && s.soc !== undefined) p.push('SOC ' + Math.round(s.soc) + '%'); if (s.import_price !== null && s.import_price !== undefined) p.push('buy ' + s.import_price + 'c'); if (s.export_price !== null && s.export_price !== undefined) p.push('sell ' + s.export_price + 'c'); if (s.hour !== null && s.hour !== undefined) { var h = Math.floor(s.hour), m = Math.round((s.hour - h) * 60); p.push(('0' + h).slice(-2) + ':' + ('0' + m).slice(-2)); } return p.join(' · '); }
+  function render(d) {
+    if (d.error) { $('empty').hidden = false; $('main').hidden = true; $('empty').innerHTML = '<span class="err">' + B.esc(d.error) + '</span>'; B.resize(); return; }
+    site = d.site_id || site; $('empty').hidden = true; $('main').hidden = false;
+    var st = d.status || 'none', lim = d.limits || {};
+    var chip = $('chip'); chip.hidden = false;
+    chip.className = 'chip ' + (st === 'active' ? 'brand' : st === 'proposed' ? 'warn' : '');
+    chip.textContent = st === 'active' ? (d.dry_run ? 'running · demo' : 'running') : st === 'proposed' ? 'proposed' : st === 'ended' ? 'ended' : 'none';
+    $('title').textContent = d.name || (d.proposal && d.proposal.name) || 'Strategy';
+    $('sub').textContent = B.siteLabel({ id: d.site_id }) + (st === 'active' ? ' · ' + lease(d.remaining_minutes) + ' left' : st === 'proposed' && d.proposal ? ' · runs ' + lease(d.proposal.duration_minutes || 1440) : '');
+    var summary = d.summary || (d.proposal && d.proposal.summary) || '';
+    $('summary').hidden = !summary; $('summary').textContent = summary;
+    if (st === 'none') { $('rules').innerHTML = ''; $('fallback').textContent = ''; $('now').hidden = true; $('hist').innerHTML = ''; $('actions').hidden = true;
+      $('limits').textContent = 'No strategy on this site yet. Tell me what you want the battery to do and I will write the rules for you to approve.'; B.resize(); return; }
+    var hit = st === 'proposed' ? (d.would && d.would.rule) : (d.last_action && d.last_action.rule);
+    $('rules').innerHTML = (d.rules || []).map(function (r, i) { return '<li' + (hit === i ? ' class="hit"' : '') + '><div>' + ruleText(r) + (r.note ? '<span class="note">' + B.esc(r.note) + '</span>' : '') + '</div></li>'; }).join('');
+    $('fallback').textContent = d.fallback ? 'otherwise ' + (d.fallback.text || d.fallback.action) : '';
+    var now = $('now'); now.hidden = false;
+    if (st === 'proposed') {
+      var w = d.would || {};
+      now.innerHTML = '<div>Right now this would <b>' + B.esc(w.action || '') + '</b>' + (w.rule !== null && w.rule !== undefined ? ' (rule ' + (w.rule + 1) + ')' : ' (fallback)') + '</div><div class="read">' + B.esc(readings(d.readings)) + '</div>';
+    } else if (st === 'active' && d.last_action) {
+      var a = d.last_action;
+      now.innerHTML = '<div>Now: <b>' + B.esc(a.action) + '</b>' + (a.rule !== null && a.rule !== undefined ? ' (rule ' + (a.rule + 1) + ')' : ' (fallback)') + (a.at ? ' since ' + hhmm(a.at) : '') + '</div><div class="why">' + B.esc(a.why || '') + '</div>';
+    } else if (st === 'ended') {
+      now.innerHTML = '<div>Ended' + (d.ended_at ? ' at ' + hhmm(d.ended_at) : '') + ': ' + B.esc(d.end_reason || '') + '</div><div class="why">Back to ' + B.esc(d.restore_to || 'the previous mode') + '.</div>';
+    } else { now.hidden = true; }
+    var hist = (d.history || []).slice(-5).reverse();
+    $('hist').innerHTML = st === 'active' || st === 'ended' ? hist.map(function (h) { return '<li><span class="t">' + hhmm(h.at) + '</span><span class="a">' + B.esc(h.action) + '</span><span>' + B.esc(h.why || '') + (h.applied === false ? ' (demo, not sent)' : '') + '</span></li>'; }).join('') : '';
+    $('limits').textContent = 'Checked every ' + (lim.evaluation_every_minutes || 5) + ' min · at most ' + (lim.max_action_changes_per_hour || 3) + ' changes an hour, ' + (lim.min_dwell_minutes || 15) + ' min apart · stale readings mean auto · ' + (st === 'proposed' ? 'runs ' + lease((d.proposal && d.proposal.duration_minutes) || 1440) + ', then back to the previous mode.' : 'back to ' + B.esc(d.restore_to || 'the previous mode') + ' when it ends.');
+    var actions = $('actions'), go = $('go'), state = $('state'); state.textContent = ''; state.className = 'state';
+    if (st === 'proposed') { proposal = d.proposal; actions.hidden = false; go.className = 'btn'; go.textContent = 'Start' + (d.dry_run ? ' (demo)' : ''); go.disabled = false;
+      go.onclick = function () { go.disabled = true; state.textContent = 'Starting…';
+        B.callTool('start_strategy', Object.assign({ site_id: site, accept_risk: true }, proposal)).then(function (res) { var o = parse(res); if (o.error) { go.disabled = false; state.className = 'state bad'; state.textContent = o.error; B.resize(); return; } render(o); }).catch(function (e) { go.disabled = false; state.className = 'state bad'; state.textContent = (e && e.message) || 'Could not start'; B.resize(); }); };
+    } else if (st === 'active') { actions.hidden = false; go.className = 'btn stop'; go.textContent = 'Stop'; go.disabled = false;
+      go.onclick = function () { go.disabled = true; state.textContent = 'Stopping…';
+        B.callTool('end_strategy', { site_id: site }).then(function (res) { var o = parse(res); if (o.error) { go.disabled = false; state.className = 'state bad'; state.textContent = o.error; B.resize(); return; } render(o); }).catch(function (e) { go.disabled = false; state.className = 'state bad'; state.textContent = (e && e.message) || 'Could not stop'; B.resize(); }); };
+    } else { actions.hidden = true; }
+    B.resize();
+  }
+  B.onData(render);
+})();
+</script>
+</body>
+</html>

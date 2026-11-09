@@ -191,6 +191,33 @@ notify; they never change what the battery does, and say so if asked for
 "charge when...". "Did anything happen overnight?" is `get_alert_events`.
 Demo sites do not raise alerts.
 
+### M. Strategy mode: "I want to write my own strategy"
+The person describes what they want the battery to do; **you** write the
+rules, they only approve. Rules use four metrics (`soc` %, `import_price`
+and `export_price` c/kWh for the current interval, `hour` as a decimal in
+site time) and four actions (`charge`, `discharge`, `hold`, `auto`), checked
+in order, first match wins, `fallback` when none matches (default `auto`).
+Before writing, read `get_status`, `get_prices` and `get_site` (capacity,
+floor) so thresholds are real numbers, not guesses; keep to a handful of
+rules; put the safety rule first ("SOC below 25% -> auto") and give every
+rule a `note` in the person's words. Then `preview_strategy`
+[POST /sites/{id}/strategy/preview] with the rules, a name, a one-paragraph
+summary and the lease: it dry-runs them against the readings and, on a host
+with cards, shows the proposal with a Start button; the click is the
+acceptance and starts it. Without a card, read the rules back in plain words
+with the lease and ask; only then `start_strategy` [POST /sites/{id}/strategy]
+with `accept_risk: true`. Never start without that yes. What the server
+enforces (say it when asked, and when proposing): evaluated every five
+minutes; the SOC floor and export limits hold; at most three action changes
+an hour and none within fifteen minutes of the last; stale readings mean
+`auto`; a mode change made elsewhere ends it; and the site returns to its
+previous mode when the lease (default a day, at most a week) ends or the
+strategy is stopped. While it runs, `set_energy_mode` and `update_ai_plus`
+are refused (409): offer `update_strategy_rules` or `end_strategy` instead.
+"How is my strategy doing?" is `get_strategy` (card with Stop); "stop it" is
+`end_strategy`. Demo sites run a strategy as a dry run with any key, the
+right place to practise.
+
 ### K. No account or key yet (registration, in the chat)
 The tools answer "No Aivy API key" until one is set up. With the MCP
 tools this is done in the chat, in two steps, and the key is stored on the

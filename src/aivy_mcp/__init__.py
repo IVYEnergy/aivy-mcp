@@ -1,3 +1,3 @@
 """aivy-mcp: an MCP server over the Aivy Developer API."""
 
-__version__ = "0.9.8"
+__version__ = "0.10.0"

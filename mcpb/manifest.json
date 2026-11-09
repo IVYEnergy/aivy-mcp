@@ -3,7 +3,7 @@
   "manifest_version": "0.4",
   "name": "aivy-mcp",
   "display_name": "Aivy Energy",
-  "version": "0.9.8",
+  "version": "0.10.0",
   "description": "Read and control your own solar + battery system: Sungrow, Sigenergy, FoxESS, AlphaESS, SolaX.",
   "long_description": "Ask Claude what your battery is doing, what Amber Electric prices look like, when to sell tonight, and let it set the energy mode or an alert. Sign up or sign in from the chat; the key stays on this computer. Works with every brand Aivy runs. Manual (forced) modes set here are time-boxed and hand back automatically; the engine's SOC floor and export limits cannot be overridden.",
   "author": {
@@ -88,6 +88,26 @@
     {
       "name": "delete_alert",
       "description": "Retire an alert rule (past firings stay in the inbox). Confirm with the user first. Returns the site's"
+    },
+    {
+      "name": "get_strategy",
+      "description": "Strategy mode on a site: the AI-written rules running now (name, rules, lease, last action, recent"
+    },
+    {
+      "name": "preview_strategy",
+      "description": ""
+    },
+    {
+      "name": "start_strategy",
+      "description": ""
+    },
+    {
+      "name": "update_strategy_rules",
+      "description": ""
+    },
+    {
+      "name": "end_strategy",
+      "description": "Stop the running strategy now; the site goes back to the mode it had before it started. Confirm with the"
     },
     {
       "name": "get_energy_mode",

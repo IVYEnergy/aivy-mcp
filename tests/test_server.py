@@ -24,7 +24,8 @@ def test_every_tool_is_listed_and_writes_say_so():
                      "plan_best_price_discharge", "plan_discharge_to_target",
                      "list_vendors", "connect_site", "disconnect_site", "get_agent_guide",
                      "list_alerts", "create_alert", "delete_alert", "get_alert_events", "send_test_alert_email",
-                     "get_registration_terms", "register_account", "verify_registration", "sign_in"}
+                     "get_registration_terms", "register_account", "verify_registration", "sign_in",
+                     "get_strategy", "preview_strategy", "start_strategy", "update_strategy_rules", "end_strategy"}
     for t in tools:
         if t.name in ("set_energy_mode", "update_ai_plus", "connect_site", "disconnect_site"):
             assert "CHANGES THE" in t.description and "Confirm with the user" in t.description
@@ -230,6 +231,41 @@ def test_status_card_data_carries_the_site_name_when_known(monkeypatch):
     assert plan["site_id"] == "sungrow:1"
 
 
+def test_strategy_mode_proposes_then_starts_only_with_the_person_s_yes(monkeypatch):
+    rules = [{"when": [{"metric": "export_price", "operator": "above", "value": 40}],
+              "then": {"action": "discharge", "stop_soc": 30}, "note": "sell spikes"}]
+    calls: list[tuple[str, str, dict | None]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content) if request.content else None
+        calls.append((request.method, request.url.path, body))
+        if request.url.path.endswith("/strategy/preview"):
+            return httpx.Response(200, json={"site_id": "sungrow:1", "readings": {"soc": 60, "export_price": 55},
+                                             "would": {"action": "discharge", "rule": 0, "why": "x"},
+                                             "rules": [{**rules[0], "text": "when feed-in above 40c -> discharge down to 30%"}],
+                                             "fallback": {"action": "auto", "text": "auto"}, "limits": {}})
+        if request.method == "POST":
+            return httpx.Response(200, json={"site_id": "sungrow:1", "status": "active", "name": body["name"],
+                                             "rules": body["rules"], "remaining_minutes": 1440})
+        if request.method == "DELETE":
+            return httpx.Response(200, json={"site_id": "sungrow:1", "status": "ended", "end_reason": "stopped"})
+        return httpx.Response(200, json={"site_id": "sungrow:1", "status": "none", "limits": {}})
+
+    monkeypatch.setattr(server, "_client", _client_with(handler))
+    proposed = asyncio.run(server.preview_strategy("sungrow:1", "Sell spikes", rules, summary="Sell above 40c.",
+                                                   duration_minutes=720))
+    assert proposed["status"] == "proposed" and proposed["would"]["action"] == "discharge"
+    assert proposed["proposal"] == {"name": "Sell spikes", "summary": "Sell above 40c.", "rules": rules, "duration_minutes": 720}
+    assert calls[-1][2] == {"rules": rules}, "the preview sends only what the API evaluates"
+    refused = asyncio.run(server.start_strategy("sungrow:1", "Sell spikes", rules, accept_risk=False))
+    assert "error" in refused and len(calls) == 1, "no yes, no call"
+    started = asyncio.run(server.start_strategy("sungrow:1", **{k: v for k, v in proposed["proposal"].items()}, accept_risk=True))
+    assert started["status"] == "active" and calls[-1][2]["accept_risk"] is True and calls[-1][2]["duration_minutes"] == 720
+    assert asyncio.run(server.get_strategy("sungrow:1"))["status"] == "none"
+    assert asyncio.run(server.end_strategy("sungrow:1"))["status"] == "ended"
+    assert calls[-1][:2] == ("DELETE", "/v1/sites/sungrow:1/strategy")
+
+
 def test_alert_writes_return_the_card_already_up_to_date(monkeypatch):
     """A host renders the alerts card for create/delete too, so their result is
     the current rule list plus what changed; list_alerts carries the rule the
@@ -266,8 +302,8 @@ def test_server_reports_the_package_version_and_the_readme_counts_the_cards():
     readme = (Path(__file__).resolve().parents[1] / "README.md").read_text(encoding="utf-8")
     tools = asyncio.run(server.mcp.list_tools())
     with_card = sum(1 for t in tools if (t.meta or {}).get("openai/outputTemplate"))
-    assert with_card == 15 and len(UI_URIS_BY_NAME) == 12
-    assert "fifteen of the tools as cards" in readme
+    assert with_card == 20 and len(UI_URIS_BY_NAME) == 13
+    assert "twenty of the tools as cards" in readme
     for t in tools:
         if (t.meta or {}).get("openai/outputTemplate"):
             assert f"`{t.name}`" in readme, f"README card table lacks {t.name}"

@@ -275,6 +275,35 @@
       }
     },
     {
+      "id": "strategy-propose",
+      "user": "I want to write my own strategy: sell above 40c but keep 30%, charge when import is negative, hold overnight.",
+      "expect": [
+        "preview_strategy"
+      ],
+      "forbid": [
+        "start_strategy",
+        "set_energy_mode"
+      ],
+      "confirm": true,
+      "note": "Read status/prices/site first, write the rules (safety rule first), preview them; on a card host the Start click is the yes, otherwise read them back and ask."
+    },
+    {
+      "id": "strategy-apply",
+      "user": "Yes, start it.",
+      "prior": [
+        "preview_strategy"
+      ],
+      "expect": [
+        "start_strategy"
+      ],
+      "confirm": false,
+      "args": {
+        "start_strategy": {
+          "accept_risk": true
+        }
+      }
+    },
+    {
       "id": "alert-is-not-control",
       "user": "Charge the battery whenever the price goes negative.",
       "expect": [],
