@@ -297,4 +297,17 @@ def test_the_server_and_every_card_carry_the_aivy_mark():
         assert [str(i.src)[:15] for i in server.mcp.icons] == ["data:image/png;", "data:image/svg+"]
     for name in UI_URIS_BY_NAME:
         html = render_template(name)
-        assert "B.logo = 'data:image/png;base64," in html and "/*LOGO*/" not in html, name
+        assert "B.logo = 'data:image/svg+xml;base64," in html and "/*LOGO*/" not in html, name
+
+
+def test_an_environment_value_that_is_not_a_key_counts_as_no_key(monkeypatch, tmp_path):
+    """Claude Desktop extensions template the environment; an empty optional
+    field arrives as the literal placeholder. It must not be sent as a key."""
+    monkeypatch.setenv("AIVY_HOME", str(tmp_path))
+    monkeypatch.setenv("AIVY_API_KEY", "${user_config.api_key}")
+    assert client_mod.env_key() is None
+    assert not client_mod.AivyClient(api_url="https://x.test/v1").has_key
+    client_mod.save_key("https://x.test/v1", "aivy_sk_saved")
+    assert client_mod.AivyClient(api_url="https://x.test/v1").api_key == "aivy_sk_saved", "the saved key wins over junk"
+    monkeypatch.setenv("AIVY_API_KEY", " aivy_sk_env ")
+    assert client_mod.AivyClient(api_url="https://x.test/v1").api_key == "aivy_sk_env", "a real key in the environment wins"

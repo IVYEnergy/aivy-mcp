@@ -34,6 +34,15 @@ def credentials_path() -> Path:
     return Path(os.environ.get("AIVY_HOME") or Path.home() / ".aivy") / "credentials.json"
 
 
+def env_key() -> str | None:
+    """AIVY_API_KEY from the environment, only when it looks like a key.
+    Hosts that template the environment (Claude Desktop extensions with an
+    empty optional field) can hand us a literal "${user_config.api_key}";
+    that must count as no key, so the saved one or sign-up still works."""
+    value = (os.environ.get("AIVY_API_KEY") or "").strip()
+    return value if value.startswith("aivy_sk_") else None
+
+
 def load_saved_key(api_url: str) -> str | None:
     try:
         data = json.loads(credentials_path().read_text(encoding="utf-8"))
@@ -75,7 +84,7 @@ class AivyClient:
 
     def __init__(self, api_key: str | None = None, api_url: str | None = None, timeout: float = 30.0):
         self.api_url = (api_url or os.environ.get("AIVY_API_URL") or DEFAULT_API_URL).rstrip("/")
-        self.api_key = api_key or os.environ.get("AIVY_API_KEY") or load_saved_key(self.api_url) or ""
+        self.api_key = api_key or env_key() or load_saved_key(self.api_url) or ""
         self._http = httpx.AsyncClient(
             base_url=self.api_url, timeout=timeout,
             headers={"User-Agent": f"aivy-mcp/{_version()}"},

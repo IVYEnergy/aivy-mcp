@@ -49,5 +49,6 @@ def server_icons() -> list[dict]:
 def render_template(name: str) -> str:
     html = (_DIR / f"{name}.html").read_text(encoding="utf-8")
     base_css = (_DIR / "base.css").read_text(encoding="utf-8")
-    bridge = (_DIR / "bridge.js").read_text(encoding="utf-8").replace("/*LOGO*/", logo_data_uri("png"), 1)
+    # the footer mark is the 758-byte SVG, not the PNG: 12 cards each inline it
+    bridge = (_DIR / "bridge.js").read_text(encoding="utf-8").replace("/*LOGO*/", logo_data_uri("svg"), 1)
     return html.replace("/*BASE_CSS*/", base_css, 1).replace("/*BRIDGE_JS*/", bridge, 1)
