@@ -230,6 +230,33 @@ def test_status_card_data_carries_the_site_name_when_known(monkeypatch):
     assert plan["site_id"] == "sungrow:1"
 
 
+def test_alert_writes_return_the_card_already_up_to_date(monkeypatch):
+    """A host renders the alerts card for create/delete too, so their result is
+    the current rule list plus what changed; list_alerts carries the rule the
+    person asked for as a draft the card fills in."""
+    rules: list[dict] = [{"id": 1, "name": "lower soc", "metric": "soc", "operator": "below", "threshold": 20}]
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST":
+            body = json.loads(request.content)
+            rules.append({"id": 2, **body})
+            return httpx.Response(200, json={"id": 2, **body})
+        if request.method == "DELETE":
+            rules[:] = [r for r in rules if r["id"] != int(request.url.path.rsplit("/", 1)[1])]
+            return httpx.Response(200, json={"deleted": 1})
+        return httpx.Response(200, json={"site_id": "sungrow:1", "rules": list(rules)})
+
+    monkeypatch.setattr(server, "_client", _client_with(handler))
+    listed = asyncio.run(server.list_alerts("sungrow:1", metric="soc", operator="above", threshold=70))
+    assert listed["draft"] == {"metric": "soc", "operator": "above", "threshold": 70, "name": "SOC above 70%"}
+    assert "draft" not in asyncio.run(server.list_alerts("sungrow:1"))
+    created = asyncio.run(server.create_alert("sungrow:1", "", "soc", "above", 70))
+    assert created["created"]["id"] == 2 and created["created"]["name"] == "SOC above 70%"
+    assert [r["id"] for r in created["rules"]] == [1, 2] and created["site_id"] == "sungrow:1"
+    deleted = asyncio.run(server.delete_alert("sungrow:1", 1))
+    assert deleted["deleted"] == 1 and [r["id"] for r in deleted["rules"]] == [2]
+
+
 def test_server_reports_the_package_version_and_the_readme_counts_the_cards():
     from aivy_mcp import __version__
     from aivy_mcp.ui import UI_URIS_BY_NAME
@@ -239,8 +266,8 @@ def test_server_reports_the_package_version_and_the_readme_counts_the_cards():
     readme = (Path(__file__).resolve().parents[1] / "README.md").read_text(encoding="utf-8")
     tools = asyncio.run(server.mcp.list_tools())
     with_card = sum(1 for t in tools if (t.meta or {}).get("openai/outputTemplate"))
-    assert with_card == 13 and len(UI_URIS_BY_NAME) == 12
-    assert "thirteen of the tools as cards" in readme
+    assert with_card == 15 and len(UI_URIS_BY_NAME) == 12
+    assert "fifteen of the tools as cards" in readme
     for t in tools:
         if (t.meta or {}).get("openai/outputTemplate"):
             assert f"`{t.name}`" in readme, f"README card table lacks {t.name}"

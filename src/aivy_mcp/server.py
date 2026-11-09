@@ -317,32 +317,79 @@ async def disconnect_site(site_id: str) -> str:
 
 # ── alerts ──
 
+_METRIC_UNIT = {"soc": "%", "import_price": "c", "export_price": "c", "temperature": "°C"}
+_METRIC_WORD = {"soc": "SOC", "import_price": "Import price", "export_price": "Feed-in price",
+                "temperature": "Forecast temperature"}
+
+
+def _alert_name(metric: str, operator: str, threshold: float) -> str:
+    """A rule title when the person did not give one: "SOC above 70%"."""
+    value = f"{threshold:g}{_METRIC_UNIT.get(metric, '')}"
+    return f"{_METRIC_WORD.get(metric, metric)} {operator} {value}"
+
+
+async def _alerts_after(site_id: str, **result: Any) -> dict[str, Any]:
+    """The alerts card after a write: the site's current rules plus what the
+    write did, so the card the host renders is already up to date."""
+    out = await _data(_c().alerts(site_id), site_id=site_id)
+    out.update(result)
+    return out
+
+
 @ui_tool(UI_URIS_BY_NAME["alerts"], invoking="Loading alerts", invoked="Alerts")
-async def list_alerts(site_id: str) -> dict[str, Any]:
+async def list_alerts(site_id: str, name: str | None = None, metric: str | None = None, operator: str | None = None,
+                      threshold: float | None = None, email: bool | None = None,
+                      cooldown_minutes: int | None = None) -> dict[str, Any]:
     """The account's alert rules on a site: what each watches (soc %, import/export price c/kWh, forecast
-    temperature °C), above/below which threshold, whether it emails, and when it last fired."""
-    return await _data(_c().alerts(site_id), site_id=site_id)
+    temperature °C), above/below which threshold, whether it emails, and when it last fired.
+
+    When the person asks for a NEW alert, pass the rule here as well (metric soc | import_price | export_price |
+    temperature, operator above | below, threshold, email, cooldown_minutes; name is optional): hosts that render
+    cards show the form filled in with it and the person's click on "Add alert" creates the rule, which is their
+    yes. Then wait for them to say it is done. Without a card, restate the rule and call create_alert once they
+    agree."""
+    draft: dict[str, Any] | None = None
+    if metric or operator or threshold is not None:
+        draft = {k: v for k, v in {"name": name, "metric": metric, "operator": operator, "threshold": threshold,
+                                    "email": email, "cooldown_minutes": cooldown_minutes}.items() if v is not None}
+        if not name and metric and operator and threshold is not None:
+            draft["name"] = _alert_name(metric, operator, threshold)
+    out = await _data(_c().alerts(site_id), site_id=site_id)
+    if draft:
+        out["draft"] = draft
+    return out
 
 
-@_tool(meta={"openai/widgetAccessible": True})
+@ui_tool(UI_URIS_BY_NAME["alerts"], invoking="Adding the alert", invoked="Alert added")
 async def create_alert(site_id: str, name: str, metric: str, operator: str, threshold: float,
                        email: bool = False, cooldown_minutes: int = 360, message: str = "",
-                       active_start: str = "00:00", active_end: str = "00:00", locale: str = "en") -> str:
+                       active_start: str = "00:00", active_end: str = "00:00", locale: str = "en") -> dict[str, Any]:
     """Set up a threshold alert: metric soc | import_price | export_price | temperature, operator above | below.
     Every firing goes to the app inbox (and the phone when the app is installed); email=True also mails the
     account's verified address (whoami.email_alerts says whether that works). Quiet for cooldown_minutes after
     each firing (min 15). An alert only tells the person something; it never changes what the battery does.
-    Confirm the rule with the user before creating it."""
-    body: dict[str, Any] = {"name": name, "metric": metric, "operator": operator, "threshold": threshold,
-                            "email": email, "cooldown_minutes": cooldown_minutes, "message": message,
+    Confirm the rule with the user before creating it (or let them add it from the list_alerts card). Returns
+    the site's rules with the new one under `created`; hosts render that as the alerts card."""
+    body: dict[str, Any] = {"name": name or _alert_name(metric, operator, threshold), "metric": metric,
+                            "operator": operator, "threshold": threshold, "email": email,
+                            "cooldown_minutes": cooldown_minutes, "message": message,
                             "active_start": active_start, "active_end": active_end, "locale": locale}
-    return await _run(_c().create_alert(site_id, body))
+    try:
+        created = await _c().create_alert(site_id, body)
+    except AivyError as e:
+        return {"error": str(e), "site_id": site_id}
+    return await _alerts_after(site_id, created=created)
 
 
-@_tool(meta={"openai/widgetAccessible": True})
-async def delete_alert(site_id: str, rule_id: int) -> str:
-    """Retire an alert rule (past firings stay in the inbox). Confirm with the user first."""
-    return await _run(_c().delete_alert(site_id, rule_id))
+@ui_tool(UI_URIS_BY_NAME["alerts"], invoking="Removing the alert", invoked="Alert removed")
+async def delete_alert(site_id: str, rule_id: int) -> dict[str, Any]:
+    """Retire an alert rule (past firings stay in the inbox). Confirm with the user first. Returns the site's
+    remaining rules (the alerts card) with the removed id under `deleted`."""
+    try:
+        await _c().delete_alert(site_id, rule_id)
+    except AivyError as e:
+        return {"error": str(e), "site_id": site_id}
+    return await _alerts_after(site_id, deleted=rule_id)
 
 
 @_tool()

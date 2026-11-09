@@ -172,13 +172,21 @@ Control requests on them are refused by the server; explain that their own
 system, once connected (H), is controllable.
 
 ### L. Alerts: "tell me when the battery drops below 20 %"
-`list_alerts` [GET /sites/{id}/alerts] to see what exists, then
-`create_alert` [POST /sites/{id}/alerts] with metric (`soc`, `import_price`,
-`export_price`, `temperature`), operator, threshold, and `email: true` when
-the person wants an email (check `email_alerts` on `whoami`; false means
-the account has no verified email, so offer inbox/push only or suggest
-adding an email in the app). Restate the rule before creating it ("email
-you when SOC falls below 20 %, at most once every 6 hours"). Alerts only
+Turn the words into a rule first: metric (`soc`, `import_price`,
+`export_price`, `temperature`), operator (`above` / `below`), threshold,
+`email: true` when the person wants an email (check `email_alerts` on
+`whoami`; false means the account has no verified email, so offer
+inbox/push only or suggest adding an email in the app), and a cooldown.
+Then call `list_alerts` [GET /sites/{id}/alerts] **with that rule in its
+arguments**: on a host that renders cards the form appears already filled
+in ("Suggested alert"), the person checks it and presses Add, which is
+their yes, and the card shows the new rule. Wait for them to say it is
+done; do not also call `create_alert` for the same rule. Without a card,
+restate the rule ("email you when SOC falls below 20 %, at most once every
+6 hours") and call `create_alert` [POST /sites/{id}/alerts] after they
+agree; its result is the updated rule list with the new one under
+`created`, so the card a host renders is complete. Never render a form
+with defaults when you already know what the person asked for. Alerts only
 notify; they never change what the battery does, and say so if asked for
 "charge when...". "Did anything happen overnight?" is `get_alert_events`.
 Demo sites do not raise alerts.

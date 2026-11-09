@@ -21,6 +21,9 @@ input[type=text], input[type=number], select { width: 100%; font: inherit; font-
 .check { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text2); margin-top: 8px; }
 .actions { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
 .state { font-size: 12px; color: var(--text2); } .state.ok { color: var(--brand); } .state.bad { color: var(--danger); }
+.rules li.fresh { background: var(--fill); border-radius: 10px; padding-left: 8px; padding-right: 8px; margin: 2px -8px; border-top: 0; }
+.new.draft { outline: 2px solid var(--brand); outline-offset: -2px; }
+.hint { font-size: 12px; color: var(--text2); margin: -2px 0 6px; }
 </style>
 </head>
 <body>
@@ -33,8 +36,9 @@ input[type=text], input[type=number], select { width: 100%; font: inherit; font-
     <div class="empty" id="empty">Loading rules…</div>
     <div id="main" hidden>
       <ul class="rules" id="rules"></ul>
-      <div class="new">
-        <h4>New alert</h4>
+      <div class="new" id="new">
+        <h4 id="newh">New alert</h4>
+        <div class="hint" id="hint" hidden>Suggested from what you asked. Check it, then press Add alert.</div>
         <div class="grid3">
           <div><label>Name</label><input type="text" id="name" placeholder="Battery low" maxlength="100"></div>
           <div><label>Watch</label><select id="metric"><option value="soc">Battery SOC (%)</option><option value="import_price">Import price (c/kWh)</option><option value="export_price">Feed-in price (c/kWh)</option><option value="temperature">Forecast temperature (°C)</option></select></div>
@@ -56,27 +60,42 @@ input[type=text], input[type=number], select { width: 100%; font: inherit; font-
 (function () {
   var B = window.AivyBridge, $ = function (id) { return document.getElementById(id); };
   var METRIC = { soc: ['SOC', '%'], import_price: ['import', 'c'], export_price: ['feed-in', 'c'], temperature: ['forecast', '°C'] };
+  var WORD = { soc: 'SOC', import_price: 'Import price', export_price: 'Feed-in price', temperature: 'Forecast temperature' };
   var site = null;
   function parse(res) { var out = res; if (res && res.content && res.content[0] && res.content[0].text) { try { out = JSON.parse(res.content[0].text); } catch (e) {} } if (out && out.structuredContent) out = out.structuredContent; return out || {}; }
-  function draw(rules) {
+  function autoName() { var m = $('metric').value, u = (METRIC[m] || ['', ''])[1]; return (WORD[m] || m) + ' ' + $('op').value + ' ' + $('thr').value + u; }
+  function draw(rules, freshId) {
     var ul = $('rules');
     if (!rules.length) { ul.innerHTML = '<li><span class="c">No alerts on this site yet.</span></li>'; B.resize(); return; }
-    ul.innerHTML = rules.map(function (r) { var m = METRIC[r.metric] || [r.metric, '']; return '<li><div style="flex:1"><div class="n">' + B.esc(r.name) + (r.email ? ' <span class="chip" style="font-size:10px">email</span>' : '') + '</div><div class="c">' + B.esc(m[0]) + ' ' + B.esc(r.operator) + ' ' + B.esc(r.threshold) + m[1] + ' · quiet ' + Math.round((r.cooldown_minutes || 0) / 60) + 'h' + (r.last_triggered_at ? ' · last fired ' + new Date(r.last_triggered_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '') + '</div></div><button class="del" data-id="' + r.id + '">Delete</button></li>'; }).join('');
-    ul.querySelectorAll('.del').forEach(function (b) { b.onclick = function () { b.disabled = true; B.callTool('delete_alert', { site_id: site, rule_id: +b.dataset.id }).then(reload).catch(function () { b.disabled = false; }); }; });
+    ul.innerHTML = rules.map(function (r) { var m = METRIC[r.metric] || [r.metric, '']; var fresh = freshId !== undefined && freshId !== null && r.id === freshId; return '<li' + (fresh ? ' class="fresh"' : '') + '><div style="flex:1"><div class="n">' + B.esc(r.name) + (fresh ? ' <span class="chip" style="font-size:10px">new</span>' : '') + (r.email ? ' <span class="chip" style="font-size:10px">email</span>' : '') + '</div><div class="c">' + B.esc(m[0]) + ' ' + B.esc(r.operator) + ' ' + B.esc(r.threshold) + m[1] + ' · quiet ' + Math.round((r.cooldown_minutes || 0) / 60) + 'h' + (r.last_triggered_at ? ' · last fired ' + new Date(r.last_triggered_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '') + '</div></div><button class="del" data-id="' + r.id + '">Delete</button></li>'; }).join('');
+    ul.querySelectorAll('.del').forEach(function (b) { b.onclick = function () { b.disabled = true; B.callTool('delete_alert', { site_id: site, rule_id: +b.dataset.id }).then(function (res) { var out = parse(res); if (out.error) { b.disabled = false; return; } return out.rules ? draw(out.rules) : reload(); }).catch(function () { b.disabled = false; }); }; });
     B.resize();
   }
   function reload() { return B.callTool('list_alerts', { site_id: site }).then(function (res) { draw(parse(res).rules || []); }); }
+  /* A draft comes from the assistant (list_alerts called with the rule the person asked for): fill the form so one click adds it. */
+  function fill(draft) {
+    if (draft.metric && METRIC[draft.metric]) $('metric').value = draft.metric;
+    if (draft.operator) $('op').value = draft.operator;
+    if (draft.threshold !== undefined && draft.threshold !== null) $('thr').value = draft.threshold;
+    if (typeof draft.email === 'boolean') $('email').checked = draft.email;
+    if (draft.cooldown_minutes) { var c = $('cool'), have = false; for (var i = 0; i < c.options.length; i++) if (+c.options[i].value === +draft.cooldown_minutes) have = true; if (!have) { var o = document.createElement('option'); o.value = draft.cooldown_minutes; o.textContent = draft.cooldown_minutes >= 60 ? Math.round(draft.cooldown_minutes / 60) + ' hours' : draft.cooldown_minutes + ' min'; c.appendChild(o); } c.value = draft.cooldown_minutes; }
+    $('name').value = draft.name || autoName();
+    $('newh').textContent = 'Suggested alert'; $('hint').hidden = false; $('new').className = 'new draft';
+  }
   B.onData(function (d) {
     if (d.error) { $('empty').innerHTML = '<span class="err">' + B.esc(d.error) + '</span>'; return; }
-    site = d.site_id || d.id; $('sub').textContent = B.siteLabel(d); $('empty').hidden = true; $('main').hidden = false; draw(d.rules || []);
+    site = d.site_id || d.id; $('sub').textContent = B.siteLabel(d); $('empty').hidden = true; $('main').hidden = false;
+    draw(d.rules || [], d.created && d.created.id);
+    if (d.draft) fill(d.draft);
+    if (d.created) { $('state').className = 'state ok'; $('state').textContent = 'Added "' + (d.created.name || '') + '"'; }
+    else if (d.deleted) { $('state').className = 'state'; $('state').textContent = 'Removed'; }
   });
   $('metric').onchange = function () { $('thr').value = { soc: 20, import_price: 30, export_price: 50, temperature: 35 }[$('metric').value]; $('op').value = $('metric').value === 'soc' ? 'below' : 'above'; };
   $('add').onclick = function () {
-    var state = $('state'), name = $('name').value.trim(); state.className = 'state';
-    if (!name) { state.className = 'state bad'; state.textContent = 'Give the alert a name.'; return; }
+    var state = $('state'), name = $('name').value.trim() || autoName(); state.className = 'state';
     $('add').disabled = true; state.textContent = 'Adding…';
     B.callTool('create_alert', { site_id: site, name: name, metric: $('metric').value, operator: $('op').value, threshold: +$('thr').value, email: $('email').checked, cooldown_minutes: +$('cool').value })
-      .then(function (res) { var out = parse(res); $('add').disabled = false; if (out.error) { state.className = 'state bad'; state.textContent = out.error; return; } state.className = 'state ok'; state.textContent = 'Added'; $('name').value = ''; return reload(); })
+      .then(function (res) { var out = parse(res); $('add').disabled = false; if (out.error) { state.className = 'state bad'; state.textContent = out.error; return; } state.className = 'state ok'; state.textContent = 'Added "' + name + '"'; $('name').value = ''; $('newh').textContent = 'New alert'; $('hint').hidden = true; $('new').className = 'new'; return out.rules ? draw(out.rules, out.created && out.created.id) : reload(); })
       .catch(function (e) { $('add').disabled = false; state.className = 'state bad'; state.textContent = (e && e.message) || 'Could not add'; });
   };
 })();

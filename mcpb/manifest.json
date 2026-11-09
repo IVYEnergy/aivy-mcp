@@ -3,7 +3,7 @@
   "manifest_version": "0.4",
   "name": "aivy-mcp",
   "display_name": "Aivy Energy",
-  "version": "0.9.7",
+  "version": "0.9.8",
   "description": "Read and control your own solar + battery system: Sungrow, Sigenergy, FoxESS, AlphaESS, SolaX.",
   "long_description": "Ask Claude what your battery is doing, what Amber Electric prices look like, when to sell tonight, and let it set the energy mode or an alert. Sign up or sign in from the chat; the key stays on this computer. Works with every brand Aivy runs. Manual (forced) modes set here are time-boxed and hand back automatically; the engine's SOC floor and export limits cannot be overridden.",
   "author": {
@@ -82,6 +82,14 @@
       "description": "The account's alert rules on a site: what each watches (soc %, import/export price c/kWh, forecast"
     },
     {
+      "name": "create_alert",
+      "description": "Set up a threshold alert: metric soc | import_price | export_price | temperature, operator above | below."
+    },
+    {
+      "name": "delete_alert",
+      "description": "Retire an alert rule (past firings stay in the inbox). Confirm with the user first. Returns the site's"
+    },
+    {
       "name": "get_energy_mode",
       "description": "Current energy mode (selfConsumption | amber_smart = Ai+ | forced), its forced windows, the SOC floor, the"
     },
@@ -128,14 +136,6 @@
     {
       "name": "disconnect_site",
       "description": "CHANGES THE ACCOUNT (control scope). Confirm with the user before calling."
-    },
-    {
-      "name": "create_alert",
-      "description": "Set up a threshold alert: metric soc | import_price | export_price | temperature, operator above | below."
-    },
-    {
-      "name": "delete_alert",
-      "description": "Retire an alert rule (past firings stay in the inbox). Confirm with the user first."
     },
     {
       "name": "get_alert_events",

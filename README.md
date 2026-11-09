@@ -136,7 +136,7 @@ the playbook, the tool descriptions or the model.
 ## Cards in chat
 
 Hosts that render [MCP Apps](https://github.com/modelcontextprotocol/ext-apps)
-(and ChatGPT through its Apps SDK) show thirteen of the tools as cards instead
+(and ChatGPT through its Apps SDK) show fifteen of the tools as cards instead
 of text, in the same style as the Aivy mobile app, light and dark:
 
 | Tool | Card |
@@ -152,7 +152,8 @@ of text, in the same style as the Aivy mobile app, light and dark:
 | `get_operations` | Timeline of what the platform did and why |
 | `get_ai_plus` | Ai+ levers as sliders and switches, built from the engine's own ranges; Save |
 | `plan_discharge_to_target` | The hold-a-reserve plan with Apply |
-| `list_alerts` | Alert rules with Delete, and a form to add one (email optional) |
+| `list_alerts` | Alert rules with Delete, and a form to add one; called with the rule the person asked for, the form comes filled in and one click adds it |
+| `create_alert`, `delete_alert` | The same card, already showing the rule just added (marked new) or the remaining rules |
 | `list_sites` | Your sites with a Status button each |
 
 Every card is one self-contained HTML document (no network, no assets), so

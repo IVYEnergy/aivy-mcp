@@ -253,7 +253,7 @@
         "set_energy_mode"
       ],
       "confirm": true,
-      "note": "Check email_alerts, restate the rule (threshold, cooldown), ask before creating."
+      "note": "Check email_alerts, then either list_alerts with the rule as its arguments (card hosts: the form comes filled in, the click is the yes) or restate the rule (threshold, cooldown) and ask before creating."
     },
     {
       "id": "alert-apply",
