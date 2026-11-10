@@ -26,7 +26,8 @@ and connect systems. Then pass it as `AIVY_API_KEY` (step 2). The key sees
 exactly what your account sees, nothing more.
 
 No hardware yet? Every key also lists demo sites (`sandbox:...`, replayed real
-data, read-only), so you can try everything first. Accounts and keys can also
+data); mode and Ai+ changes on them are kept for your account only and never
+reach hardware, so you can try everything first. Accounts and keys can also
 be created from the API itself; see the
 [Quickstart](https://bridge.ivyenergy.com.au/v1/docs#description/quickstart).
 

@@ -50,11 +50,13 @@ timezone (on `get_site`).
 1. No key at all (the tools answer 401, or the person says they have not
    signed up)? Workflow K gets them one. Nothing else works without it.
 2. `whoami` [GET /me]: confirms the key works and whether it is `read` or
-   `control`. A `read` key cannot change anything; say so when asked to.
+   `control`. A `read` key cannot change a real site; say so when asked to
+   (demo sites take changes from any key, kept for this account only).
 3. `list_sites` [GET /sites]: the site ids (`vendor:station_id`) every other
    tool takes. Sites with `demo: true` (`sandbox:...`) are shared replay
-   data for trying the API: readable, never controllable, and say so if you
-   quote them.
+   data for trying the API: readable by every key, and a mode or Ai+ change
+   on one is kept for this account only (`demo: true` in the reply, nothing
+   reaches hardware). Say they are demos when you quote them.
 4. Only demo sites? The person has not connected their own system yet:
    workflow H.
 
@@ -185,9 +187,11 @@ switch. On yes: `update_ai_plus`. A 409 with `rejected` lists what was out of
 range; nothing was changed.
 
 ### J. The person has no hardware yet
-Use the `demo` sites for every read workflow and say they are demos.
-Control requests on them are refused by the server; explain that their own
-system, once connected (H), is controllable.
+Use the `demo` sites for every workflow and say they are demos. A mode or
+Ai+ change on a demo site works with any key, is kept for this account only
+and never reaches hardware (the reply says `demo: true`); the person can try
+the write workflows there. Removing a demo site or giving it alerts is
+refused. Their own system, once connected (H), is the real thing.
 
 ### L. Alerts: "tell me when the battery drops below 20 %"
 Turn the words into a rule first: metric (`soc`, `import_price`,

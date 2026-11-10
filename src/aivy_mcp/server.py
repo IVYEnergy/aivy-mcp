@@ -68,7 +68,8 @@ _INSTRUCTIONS = (
         "Australian cents per kWh. Readings refresh about once a minute: do not poll faster. "
         "Changing the mode or Ai+ settings needs a control-scope key; a forced (manual) mode set here is "
         "time-boxed and the server returns the site to its previous mode when the time is up. "
-        "Sites named sandbox:... are shared demo data: readable, never controllable. "
+        "Sites named sandbox:... are shared demo data: readable by every key; energy-mode and Ai+ changes on them are "
+        "kept for the user's account only (demo: true, nothing reaches hardware), so they are the place to try writes. "
         "No site yet? list_vendors then connect_site links the user's own system. "
         "No key yet (tools answer 'No Aivy API key')? register_account + verify_registration creates an account "
         "and key from the chat; sign_in does the same for an existing account. "
@@ -530,7 +531,8 @@ async def set_energy_mode(
     variant picks the Ai+ engine when mode is amber_smart. settings, for an au_* mode only, stores that strategy's
     own numbers with the switch (e.g. {"export_threshold_c": 25, "reserve_soc": 60}; get_energy_mode shows the ones
     in force, every one has a default from the author, out-of-range values are refused). The SOC floor and export
-    limits cannot be overridden. Takes effect on the engine's next tick (about a minute)."""
+    limits cannot be overridden. Takes effect on the engine's next tick (about a minute). On a demo site (sandbox:...)
+    any key may call this: the change is kept for the user's account only (`demo: true`), nothing reaches hardware."""
     body: dict[str, Any] = {"mode": mode}
     for key, value in (("duration_minutes", duration_minutes), ("action", action), ("power_w", power_w),
                        ("target_soc", target_soc), ("stop_soc", stop_soc), ("time_slots", time_slots),
@@ -553,7 +555,8 @@ async def update_ai_plus(site_id: str, settings: dict[str, Any] | None = None, v
 
     Set Ai+ levers (names and ranges from get_ai_plus `tunable`) and/or switch engine variant. Validated against
     the variant that will run; if any value is rejected nothing changes and `rejected` says why. Does not switch
-    the mode: use set_energy_mode(mode='amber_smart') for that."""
+    the mode: use set_energy_mode(mode='amber_smart') for that. On a demo site any key may call this; the levers are
+    kept for the user's account only."""
     return await _run(_c().patch_ai_plus(site_id, variant, settings or {}))
 
 
