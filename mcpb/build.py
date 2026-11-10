@@ -56,7 +56,7 @@ def main() -> int:
             "mcp_config": {
                 "command": "uv",
                 "args": ["run", "--directory", "${__dirname}", "src/server.py"],
-                "env": {"AIVY_API_KEY": "${user_config.api_key}"},
+                "env": {"AIVY_API_KEY": "${user_config.api_key}", "AIVY_MCP_LAUNCH": "mcpb"},
             },
         },
         "user_config": {

@@ -45,7 +45,7 @@ into every MCP client it finds: Codex, Claude Code, Claude Desktop, Cursor):
 curl -fsSL https://raw.githubusercontent.com/IVYEnergy/aivy-mcp/main/install.sh | sh
 ```
 
-Already have `uv`? `uvx --from aivy-mcp aivy-mcp-setup` does the same, and
+Already have `uv`? `uvx --from aivy-mcp@latest aivy-mcp-setup` does the same, and
 `aivy-mcp setup --client codex --key aivy_sk_...` targets one client or
 stores an existing key. Files are backed up before they change. Restart the
 client, then say "sign me up to Aivy". An assistant that can run shell
@@ -54,7 +54,7 @@ commands (Claude Code, Codex) can run the line for you.
 Or by hand. Claude Code (drop `-e AIVY_API_KEY=...` to sign up or sign in from the chat instead):
 
 ```bash
-claude mcp add aivy -e AIVY_API_KEY=aivy_sk_... -- uvx aivy-mcp
+claude mcp add aivy -e AIVY_API_KEY=aivy_sk_... -- uvx aivy-mcp@latest
 ```
 
 Codex (`~/.codex/config.toml`):
@@ -62,7 +62,7 @@ Codex (`~/.codex/config.toml`):
 ```toml
 [mcp_servers.aivy]
 command = "uvx"
-args = ["aivy-mcp"]
+args = ["aivy-mcp@latest"]
 # optional: [mcp_servers.aivy.env] AIVY_API_KEY = "aivy_sk_..."
 ```
 
@@ -73,7 +73,7 @@ Claude Desktop / Cursor / any MCP client (`mcpServers` block):
   "mcpServers": {
     "aivy": {
       "command": "uvx",
-      "args": ["aivy-mcp"],
+      "args": ["aivy-mcp@latest"],
       "env": { "AIVY_API_KEY": "aivy_sk_..." }
     }
   }
@@ -81,6 +81,16 @@ Claude Desktop / Cursor / any MCP client (`mcpServers` block):
 ```
 
 No `uv`? `pipx run aivy-mcp` or `pip install aivy-mcp && aivy-mcp` work too.
+
+**Updating.** `aivy-mcp@latest` makes `uv` check PyPI every time the client
+starts the server, so restarting the client is the update. An entry written
+before 0.11.3 ran plain `uvx aivy-mcp`, which `uv` keeps at the version it
+first resolved: run the one-line installer again and it rewrites the entry
+(key kept), or edit it by hand. The Claude Desktop extension pins its
+version: open the new `.mcpb` from the latest release. The server checks
+PyPI once per start and, when a newer release exists, the playbook
+(`get_agent_guide`) ends with a short update note the assistant passes on;
+`AIVY_MCP_NO_UPDATE_CHECK=1` turns that off.
 
 Assistants that cannot run local tools (ChatGPT in the browser) can use the
 HTTP API directly. Paste this into the chat:

@@ -147,7 +147,7 @@ def test_connect_site_sends_only_what_the_vendor_needs(monkeypatch):
     assert seen["method"] == "POST" and seen["body"] == {"vendor": "sungrow", "region": "AU", "sn": "A234", "nmi": "2001234567"}
 
 
-def test_the_playbook_is_one_text_in_every_form():
+def test_the_playbook_is_one_text_in_every_form(monkeypatch):
     """The MCP tool, the Claude skill and the hosted /v1/agent-guide.md must
     never drift: SKILL.md is the playbook with a front-matter block on top."""
     from pathlib import Path
@@ -160,7 +160,49 @@ def test_the_playbook_is_one_text_in_every_form():
     hosted = root.parents[1] / "backend/app/static/agent-guide.md"
     if hosted.exists():  # monorepo only; the public repo has no backend
         assert hosted.read_text(encoding="utf-8") == playbook
+    monkeypatch.setenv("AIVY_MCP_NO_UPDATE_CHECK", "1")
     assert asyncio.run(server.get_agent_guide()) == playbook
+
+
+def test_a_newer_release_is_reported_after_the_playbook_per_launch_mode(monkeypatch):
+    """The version check is one PyPI GET, cached, silent on failure, and the
+    note names the way out for the client that started this process."""
+    from aivy_mcp import __version__, update
+    monkeypatch.delenv("AIVY_MCP_NO_UPDATE_CHECK", raising=False)
+    calls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request.url.path)
+        return httpx.Response(200, json={"info": {"version": "99.0.0"}})
+
+    real_client = httpx.AsyncClient
+    monkeypatch.setattr(update.httpx, "AsyncClient",
+                        lambda **kw: real_client(transport=httpx.MockTransport(handler), **kw))
+    monkeypatch.setattr(update, "_checked", {})
+    monkeypatch.setenv("AIVY_MCP_LAUNCH", "mcpb")
+    guide = asyncio.run(server.get_agent_guide())
+    assert guide.startswith("# Aivy agent playbook") and "\n## Update\n" in guide
+    assert f"aivy-mcp 99.0.0 is on PyPI; this server is {__version__}" in guide
+    assert update.RELEASES_URL in guide and ".mcpb" in guide
+    asyncio.run(server.get_agent_guide())
+    assert calls == ["/pypi/aivy-mcp/json"]  # cached: one lookup per process
+
+    assert "uvx aivy-mcp@latest" in update.notice_for("99.0.0", "uvx")
+    assert update.INSTALLER in update.notice_for("99.0.0", "other")
+    assert update.is_newer("0.12.0", "0.11.3") and not update.is_newer("0.11.3", "0.11.3")
+    assert not update.is_newer(None, "0.11.3") and not update.is_newer("0.9.9", "0.11.3")
+
+    # Same version, or PyPI unreachable: the playbook alone.
+    monkeypatch.setattr(update, "_checked", {"latest": __version__})
+    assert "## Update" not in asyncio.run(server.get_agent_guide())
+
+    def down(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("offline")
+
+    monkeypatch.setattr(update.httpx, "AsyncClient",
+                        lambda **kw: real_client(transport=httpx.MockTransport(down), **kw))
+    monkeypatch.setattr(update, "_checked", {})
+    assert "## Update" not in asyncio.run(server.get_agent_guide())
 
 
 def test_eval_checker_judges_order_forbidden_tools_and_confirmation():

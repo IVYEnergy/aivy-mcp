@@ -1,10 +1,12 @@
 """MCP server exposing the Aivy Developer API as tools.
 
-Run with `uvx aivy-mcp` (stdio). Configuration by environment:
+Run with `uvx aivy-mcp@latest` (stdio). Configuration by environment:
 
     AIVY_API_KEY   personal key (optional: without one, register_account /
                    sign_in create and store a key from the chat)
     AIVY_API_URL   API base, default https://bridge.ivyenergy.com.au/v1
+    AIVY_MCP_NO_UPDATE_CHECK  set to skip the once-per-process PyPI version
+                   check that get_agent_guide reports (see update.py)
 
 Tool descriptions are the contract the model reads, so they say what a
 call changes, what it cannot change, and what the server will do on its
@@ -194,8 +196,11 @@ async def get_agent_guide() -> str:
     """The Aivy agent playbook: which tools answer which questions, the rules for writes (confirm first, forced
     mode is time-boxed, never guess numbers, do not poll), the step-by-step workflows (status, diagnosis, prices,
     earnings, selling tonight, keeping a reserve, charging now, connecting a system, Ai+ tuning) and what each
-    error code means. Read it once at the start of a conversation."""
-    return PLAYBOOK
+    error code means. Read it once at the start of a conversation. When a newer aivy-mcp is released, a short
+    update note follows the playbook."""
+    from aivy_mcp.update import update_notice
+    notice = await update_notice()
+    return PLAYBOOK if not notice else PLAYBOOK.rstrip("\n") + "\n\n## Update\n\n" + notice + "\n"
 
 
 # ── account / sites ──

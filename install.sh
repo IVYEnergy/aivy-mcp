@@ -23,9 +23,10 @@ done
 export PATH
 
 if ! have uvx; then
-  echo "uvx is still not on PATH; open a new terminal and run: uvx --from aivy-mcp aivy-mcp-setup" >&2
+  echo "uvx is still not on PATH; open a new terminal and run: uvx --from aivy-mcp@latest aivy-mcp-setup" >&2
   exit 1
 fi
 
+# @latest: run the newest installer even when uv has an older aivy-mcp cached.
 echo "Configuring MCP clients..."
-exec uvx --from aivy-mcp aivy-mcp-setup "$@"
+exec uvx --from aivy-mcp@latest aivy-mcp-setup "$@"
