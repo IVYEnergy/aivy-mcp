@@ -6,24 +6,36 @@
 (function () {
   var B = window.AivyBridge = { data: null, host: null, theme: null, _listeners: [] };
   B.onData = function (fn) { B._listeners.push(fn); if (B.data) fn(B.data); };
-  function setData(d) { if (!d) return; B.data = d; B._listeners.forEach(function (f) { try { f(d); } catch (e) { console.error(e); } }); }
+  var lastData = '';
+  function setData(d) {
+    if (!d) return;
+    var key = ''; try { key = JSON.stringify(d); } catch (e) {}
+    if (key && key === lastData) return;   /* the same result may arrive on both channels */
+    lastData = key; B.data = d; B._listeners.forEach(function (f) { try { f(d); } catch (e) { console.error(e); } });
+  }
   function setTheme(t) { B.theme = t === 'dark' ? 'dark' : 'light'; document.documentElement.setAttribute('data-theme', B.theme); }
   function height() { return Math.ceil(document.documentElement.getBoundingClientRect().height); }
 
-  if (window.openai) {
-    B.host = 'openai';
-    setTheme(window.openai.theme);
+  /* Hosts. ChatGPT and Codex mount the card in an MCP Apps sandbox and also
+     expose window.openai on top; Claude Desktop is a plain MCP Apps host.
+     Every MCP Apps host waits for the ui/initialize handshake before it shows
+     the frame (Codex gives up after 5 s with "MCP app initialization timed
+     out"), so the handshake runs whenever the card is framed, and
+     window.openai only adds the ChatGPT extras: an early copy of the tool
+     output, the theme, and its own call/link/height APIs. */
+  var oa = window.openai || null;
+  var framed = !!(window.parent && window.parent !== window);
+  if (oa) {
+    setTheme(oa.theme);
     window.addEventListener('openai:set_globals', function (e) {
       var g = (e.detail && e.detail.globals) || {};
       if (g.theme) setTheme(g.theme);
       if (g.toolOutput) setData(g.toolOutput);
     });
-    B.callTool = function (name, args) { return window.openai.callTool(name, args); };
-    B.openLink = function (url) { return window.openai.openExternal({ href: url }); };
-    B.resize = function () { try { window.openai.notifyIntrinsicHeight(height()); } catch (e) {} };
-    if (window.openai.toolOutput) setData(window.openai.toolOutput);
-  } else if (window.parent && window.parent !== window) {
-    B.host = 'mcp-apps';
+    if (oa.toolOutput) setData(oa.toolOutput);
+  }
+  if (framed) {
+    B.host = oa ? 'mcp-apps+openai' : 'mcp-apps';
     var nextId = 0, pending = {};
     function send(msg) { window.parent.postMessage(msg, '*'); }
     function request(method, params) {
@@ -48,7 +60,7 @@
         send({ jsonrpc: '2.0', id: m.id, result: {} });
       }
     });
-    request('ui/initialize', { protocolVersion: '2026-01-26', appInfo: { name: 'aivy', version: '0.5.0' }, appCapabilities: {} })
+    request('ui/initialize', { protocolVersion: '2026-01-26', appInfo: { name: 'aivy', version: '0.11.2' }, appCapabilities: {} })
       .then(function (res) {
         var hc = (res && res.hostContext) || {};
         if (hc.theme) setTheme(hc.theme);
@@ -66,9 +78,20 @@
       }
       return err instanceof Error ? err : new Error(msg || 'The call failed');
     }
-    B.callTool = function (name, args) { return request('tools/call', { name: name, arguments: args }).catch(function (e) { throw friendly(e); }); };
-    B.openLink = function (url) { return request('ui/open-link', { url: url }); };
-    B.resize = function () { send({ jsonrpc: '2.0', method: 'ui/notifications/size-changed', params: { width: document.documentElement.scrollWidth, height: height() } }); };
+    B.callTool = function (name, args) {
+      var p = oa && oa.callTool ? oa.callTool(name, args) : request('tools/call', { name: name, arguments: args });
+      return p.catch(function (e) { throw friendly(e); });
+    };
+    B.openLink = function (url) { return oa && oa.openExternal ? oa.openExternal({ href: url }) : request('ui/open-link', { url: url }); };
+    B.resize = function () {
+      send({ jsonrpc: '2.0', method: 'ui/notifications/size-changed', params: { width: document.documentElement.scrollWidth, height: height() } });
+      if (oa && oa.notifyIntrinsicHeight) try { oa.notifyIntrinsicHeight(height()); } catch (e) {}
+    };
+  } else if (oa) {
+    B.host = 'openai';
+    B.callTool = function (name, args) { return oa.callTool(name, args); };
+    B.openLink = function (url) { return oa.openExternal({ href: url }); };
+    B.resize = function () { try { oa.notifyIntrinsicHeight(height()); } catch (e) {} };
   } else {
     B.host = 'standalone';
     B.callTool = function () { return Promise.reject(new Error('no host')); };
