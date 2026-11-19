@@ -3,7 +3,7 @@
   "manifest_version": "0.4",
   "name": "aivy-mcp",
   "display_name": "Aivy Energy",
-  "version": "0.11.4",
+  "version": "0.11.5",
   "description": "Read and control your own solar + battery system: Sungrow, Sigenergy, FoxESS, AlphaESS, SolaX.",
   "long_description": "Ask Claude what your battery is doing, what Amber Electric prices look like, when to sell tonight, and let it set the energy mode or an alert. Sign up or sign in from the chat; the key stays on this computer. Works with every brand Aivy runs. Manual (forced) modes set here are time-boxed and hand back automatically; the engine's SOC floor and export limits cannot be overridden.",
   "author": {
@@ -48,7 +48,7 @@
   "tools": [
     {
       "name": "get_registration_terms",
-      "description": "Whether sign-up is open and the terms of use / privacy policy a new account accepts (version, hash and"
+      "description": "Whether sign-up is open and the terms of use / privacy policy a new account accepts (version, hash and a link). Show the link to the person and ask whether they accept BEFORE register_account. Hosts t"
     },
     {
       "name": "list_sites",
@@ -56,27 +56,27 @@
     },
     {
       "name": "get_status",
-      "description": "What one site is doing now, and what it is. Reads only."
+      "description": "What one site is doing now, and what it is."
     },
     {
       "name": "get_curve",
-      "description": "Power and SOC history. range 1d = 5-minute points for one local day (day = YYYY-MM-DD, default today);"
+      "description": "Power and SOC history of a site: 5-minute points for one local day, or daily values over the last 7 or 30 days. Returns times (UTC), local_times, and series per channel (pv, load, battery, grid, soc)."
     },
     {
       "name": "get_earnings",
-      "description": "Energy bought, sold and self-consumed for a day (YYYY-MM-DD, 'today' or 'yesterday'), priced at the actual"
+      "description": "Energy bought, sold and self-consumed on one day, or in part of it, priced at the actual Amber half-hourly prices when Amber is linked. An estimate from vendor power samples, not the bill; read `cover"
     },
     {
       "name": "get_operations",
-      "description": "What the platform did to the site and why, newest first: each automatic (Ai+) and manual command with its"
+      "description": "What the platform did to the site and why, newest first: each automatic (Ai+) and manual command with its reason and the prices at the time. Use it to explain 'why did it charge at 3am'."
     },
     {
       "name": "get_prices",
-      "description": "Amber Electric prices for the site: the current interval and the forecast as import price and feed-in earn"
+      "description": "Amber Electric prices for the site: the current interval and the forecast as import price and feed-in earn (c/kWh incl. GST), with a summary of cheapest/dearest periods. Fails with 409 when no Amber a"
     },
     {
       "name": "list_vendors",
-      "description": "Every inverter / battery brand Aivy can connect, whether it is available on this deployment, what"
+      "description": "Every inverter / battery brand Aivy can connect, whether it is available on this deployment, what connecting one needs (`connect`: serial + NMI, a system id, or an OAuth sign-in at the vendor) and how"
     },
     {
       "name": "list_alerts",
@@ -84,27 +84,27 @@
     },
     {
       "name": "create_alert",
-      "description": "Set up a threshold alert: metric soc | import_price | export_price | temperature, operator above | below."
+      "description": "Set up a threshold alert on a site: it fires when the watched metric crosses the threshold. Every firing goes to the app inbox (and the phone when the app is installed); email=True also mails the acco"
     },
     {
       "name": "delete_alert",
-      "description": "Retire an alert rule (past firings stay in the inbox). Confirm with the user first. Returns the site's"
+      "description": "Retire an alert rule (past firings stay in the inbox). Confirm with the user first. Returns the site's remaining rules with the removed id under `deleted`."
     },
     {
       "name": "get_strategy",
-      "description": "Strategy mode on a site: the AI-written rules running now (name, rules, lease, last action, recent"
+      "description": "Strategy mode on a site: the AI-written rules running now (name, rules, lease, last action, recent evaluations), status none when there has never been one, or ended with end_reason. `limits` is what t"
     },
     {
       "name": "start_strategy",
-      "description": "Strategy mode (\"I want to write my own strategy\"): YOU write the rules from what the person wants; the server runs them. Two calls, and the second needs the first. 1) Preview (accept_risk=false, the d"
+      "description": "Preview or start a custom strategy: YOU write the rules from what the person wants. Two calls, the second needs the first."
     },
     {
       "name": "end_strategy",
-      "description": "Stop the running strategy now; the site goes back to the mode it had before it started. Confirm with the"
+      "description": "Stop the running strategy now; the site goes back to the mode it had before it started. Confirm with the person first unless they asked for it."
     },
     {
       "name": "get_energy_mode",
-      "description": "How the site is run now and how Ai+ is configured. Reads only."
+      "description": "How the site is run now and how Ai+ is configured."
     },
     {
       "name": "plan_discharge",
@@ -112,19 +112,19 @@
     },
     {
       "name": "register_account",
-      "description": "Create an Aivy account from the chat, step 1 of 2: a verification code is emailed to `email`. Needs no API"
+      "description": "Create an Aivy account from the chat, step 1 of 2: a verification code is emailed to `email`. Needs no API key. Ask the person to choose the password (8+ characters; it is also their Aivy app password"
     },
     {
       "name": "verify_registration",
-      "description": "Create an Aivy account from the chat, step 2 of 2: confirms the emailed code, accepts the terms (only pass"
+      "description": "Create an Aivy account from the chat, step 2 of 2: confirms the emailed code, accepts the terms (only pass accept_terms=true after the person said yes), creates the account and an API key, and stores "
     },
     {
       "name": "sign_in",
-      "description": "Use an existing Aivy account from the chat: creates an API key with the account's username (or email)"
+      "description": "Use an existing Aivy account from the chat: creates an API key with the account's username (or email) and password, stores it on this computer (~/.aivy/credentials.json) and uses it from now on. Needs"
     },
     {
       "name": "get_agent_guide",
-      "description": "The Aivy agent playbook: which tools answer which questions, the rules for writes (confirm first, forced"
+      "description": "The Aivy agent playbook: which tools answer which questions, the rules for writes (confirm first, forced mode is time-boxed, never guess numbers, do not poll), the step-by-step workflows (status, diag"
     },
     {
       "name": "connect_site",
