@@ -11,13 +11,13 @@ const here = dirname(fileURLToPath(import.meta.url));
 const out = process.argv[2] || here;
 // Rendered templates come from the package loader, so the test sees exactly what a host gets.
 const rendered = {};
-for (const name of ["status", "plan", "prices", "signup", "control", "connect", "curve", "earnings", "operations", "aiplus", "alerts", "sites", "strategy"]) {
+for (const name of ["status", "plan", "prices", "signup", "control", "connect", "curve", "earnings", "operations", "alerts", "sites", "strategy"]) {
   rendered[name] = execFileSync("python3", ["-c", `import sys; sys.path.insert(0, ${JSON.stringify(join(here, "../../src"))}); from aivy_mcp.ui import render_template; print(render_template(${JSON.stringify(name)}))`]).toString();
 }
 const server = createServer((req, res) => {
   const url = new URL(req.url, "http://x");
   if (url.pathname === "/host.html") { res.setHeader("content-type", "text/html"); return res.end(readFileSync(join(here, "host.html"))); }
-  const m = /^\/(status|plan|prices|signup|control|connect|curve|earnings|operations|aiplus|alerts|sites|strategy)\.html$/.exec(url.pathname);
+  const m = /^\/(status|plan|prices|signup|control|connect|curve|earnings|operations|alerts|sites|strategy)\.html$/.exec(url.pathname);
   if (m) { res.setHeader("content-type", "text/html"); return res.end(rendered[m[1]]); }
   res.statusCode = 404; res.end();
 });
@@ -25,7 +25,7 @@ await new Promise((r) => server.listen(0, "127.0.0.1", r));
 const port = server.address().port;
 const browser = await chromium.launch();
 for (const theme of ["light", "dark"]) {
-  for (const card of ["status", "plan", "prices", "signup", "control", "connect", "curve", "earnings", "operations", "aiplus", "alerts", "sites", "target", "strategy", "strategy-active", "strategy-none"]) {
+  for (const card of ["status", "plan", "prices", "signup", "control", "connect", "curve", "earnings", "operations", "alerts", "sites", "target", "strategy", "strategy-active", "strategy-none"]) {
     const page = await browser.newPage({ viewport: { width: 640, height: 800 } });
     const errors = [];
     page.on("pageerror", (e) => errors.push(String(e)));
@@ -46,22 +46,21 @@ for (const theme of ["light", "dark"]) {
     }
     if (card === "control") {
       const frame = page.frames().find((fr) => fr !== page.mainFrame());
+      // the sample site is on Ai+, so the levers are showing: change one and save
+      await frame.fill('.lever input[type=number]', "15"); await frame.locator('.lever input[type=number]').first().dispatchEvent("change");
+      await frame.click("#save"); await page.waitForTimeout(300);
+      await page.screenshot({ path: join(out, `card-control-aiplus-${theme}.png`) });
+      console.log("control Ai+ save ->", JSON.stringify((await page.evaluate(() => window.calls))[0]), "|", await frame.locator("#aistate").innerText());
       await frame.click('.seg button[data-mode="forced"]'); await page.waitForTimeout(200);
       await page.screenshot({ path: join(out, `card-control-manual-${theme}.png`) });
       await frame.click("#apply"); await page.waitForTimeout(300);
-      console.log("control apply ->", JSON.stringify((await page.evaluate(() => window.calls))[0]?.arguments));
+      console.log("control apply ->", JSON.stringify((await page.evaluate(() => window.calls))[1]?.arguments));
     }
     if (card === "connect") {
       const frame = page.frames().find((fr) => fr !== page.mainFrame());
       await frame.click('.v[data-id="sungrow"]'); await frame.fill('input[data-field="sn"]', "A234"); await frame.fill('input[data-field="nmi"]', "2001234567");
       await frame.click("#go"); await page.waitForTimeout(400);
       console.log("connect ->", (await page.evaluate(() => window.calls.map((c) => c.name))).join(","), "|", await frame.locator("#result").innerText());
-    }
-    if (card === "aiplus") {
-      const frame = page.frames().find((fr) => fr !== page.mainFrame());
-      await frame.fill('.lever input[type=number]', "15"); await frame.locator('.lever input[type=number]').first().dispatchEvent("change");
-      await frame.click("#save"); await page.waitForTimeout(300);
-      console.log("aiplus save ->", JSON.stringify((await page.evaluate(() => window.calls))[0]?.arguments), "|", await frame.locator("#state").innerText());
     }
     if (card === "alerts") {
       const frame = page.frames().find((fr) => fr !== page.mainFrame());

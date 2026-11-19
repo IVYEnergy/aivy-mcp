@@ -57,6 +57,9 @@ def check(case: dict, calls: list[dict], text: str) -> list[str]:
     for name in case.get("forbid", []):
         if name in names:
             problems.append(f"must not call {name}")
+    for name, banned in (case.get("forbid_args") or {}).items():
+        if any(c["name"] == name and all(c["args"].get(k) == v for k, v in banned.items()) for c in calls):
+            problems.append(f"must not call {name} with {banned}")
     for name, limit in (case.get("max_calls") or {}).items():
         if names.count(name) > limit:
             problems.append(f"{name} called {names.count(name)} times, limit {limit}")

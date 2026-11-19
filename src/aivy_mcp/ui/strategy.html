@@ -63,8 +63,9 @@
     chip.className = 'chip ' + (st === 'active' ? 'brand' : st === 'proposed' ? 'warn' : '');
     chip.textContent = st === 'active' ? (d.dry_run ? 'running · demo' : 'running') : st === 'proposed' ? 'proposed' : st === 'ended' ? 'ended' : 'not running';
     $('title').textContent = d.name || (d.proposal && d.proposal.name) || 'Custom strategy';
-    var cur = modeName(d.current_mode);
-    $('sub').textContent = B.siteLabel({ id: d.site_id }) + (st === 'active' ? ' · ' + lease(d.remaining_minutes) + ' left · replaces ' + (modeName({ energy_mode: d.restore_to }) || 'the previous mode') : st === 'proposed' && d.proposal ? ' · runs ' + lease(d.proposal.duration_minutes || 1440) + (cur ? ' instead of ' + cur : '') : cur ? ' · running ' + cur : '');
+    var cur = modeName(d.current_mode), rep = st === 'proposed' ? d.replaces : null;
+    var runs = (d.proposal && d.proposal.duration_minutes) || (rep && rep.remaining_minutes) || 1440;
+    $('sub').textContent = B.siteLabel({ id: d.site_id }) + (st === 'active' ? ' · ' + lease(d.remaining_minutes) + ' left · replaces ' + (modeName({ energy_mode: d.restore_to }) || 'the previous mode') : st === 'proposed' && d.proposal ? (rep ? ' · new rules for ' + (rep.name || 'the running strategy') + ' · ' + lease(runs) + ' left' : ' · runs ' + lease(runs) + (cur ? ' instead of ' + cur : '')) : cur ? ' · running ' + cur : '');
     var summary = d.summary || (d.proposal && d.proposal.summary) || '';
     $('summary').hidden = !summary; $('summary').textContent = summary;
     if (st === 'none') { $('rules').innerHTML = ''; $('fallback').textContent = ''; $('now').hidden = true; $('hist').innerHTML = ''; $('actions').hidden = true;
@@ -84,11 +85,12 @@
     } else { now.hidden = true; }
     var hist = (d.history || []).slice(-5).reverse();
     $('hist').innerHTML = st === 'active' || st === 'ended' ? hist.map(function (h) { return '<li><span class="t">' + hhmm(h.at) + '</span><span class="a">' + B.esc(h.action) + '</span><span>' + B.esc(h.why || '') + (h.applied === false ? ' (demo, not sent)' : '') + '</span></li>'; }).join('') : '';
-    $('limits').textContent = 'Checked every ' + (lim.evaluation_every_minutes || 5) + ' min · at most ' + (lim.max_action_changes_per_hour || 3) + ' changes an hour, ' + (lim.min_dwell_minutes || 15) + ' min apart · stale readings mean auto · ' + (st === 'proposed' ? 'runs ' + lease((d.proposal && d.proposal.duration_minutes) || 1440) + ', then back to the previous mode.' : 'back to ' + B.esc(d.restore_to || 'the previous mode') + ' when it ends.');
+    $('limits').textContent = 'Checked every ' + (lim.evaluation_every_minutes || 5) + ' min · at most ' + (lim.max_action_changes_per_hour || 3) + ' changes an hour, ' + (lim.min_dwell_minutes || 15) + ' min apart · stale readings mean auto · ' + (st === 'proposed' ? 'runs ' + lease(runs) + ', then back to the previous mode.' : 'back to ' + B.esc(d.restore_to || 'the previous mode') + ' when it ends.');
     var actions = $('actions'), go = $('go'), state = $('state'); state.textContent = ''; state.className = 'state';
-    if (st === 'proposed') { proposal = d.proposal; actions.hidden = false; go.className = 'btn'; go.textContent = 'Start' + (d.dry_run ? ' (demo)' : ''); go.disabled = false;
+    if (st === 'proposed') { proposal = d.proposal; actions.hidden = false; go.className = 'btn'; go.textContent = (rep ? 'Replace the rules' : 'Start') + (d.dry_run ? ' (demo)' : ''); go.disabled = false;
+      var proposalId = d.proposal_id;  // proves these are the rules shown here; the server refuses to start without it
       go.onclick = function () { go.disabled = true; state.textContent = 'Starting…';
-        B.callTool('start_strategy', Object.assign({ site_id: site, accept_risk: true }, proposal)).then(function (res) { var o = parse(res); if (o.error) { go.disabled = false; state.className = 'state bad'; state.textContent = o.error; B.resize(); return; } render(o); }).catch(function (e) { go.disabled = false; state.className = 'state bad'; state.textContent = (e && e.message) || 'Could not start'; B.resize(); }); };
+        B.callTool('start_strategy', Object.assign({ site_id: site, accept_risk: true, proposal_id: proposalId }, proposal)).then(function (res) { var o = parse(res); if (o.error) { go.disabled = false; state.className = 'state bad'; state.textContent = o.error; B.resize(); return; } render(o); }).catch(function (e) { go.disabled = false; state.className = 'state bad'; state.textContent = (e && e.message) || 'Could not start'; B.resize(); }); };
     } else if (st === 'active') { actions.hidden = false; go.className = 'btn stop'; go.textContent = 'Stop'; go.disabled = false;
       go.onclick = function () { go.disabled = true; state.textContent = 'Stopping…';
         B.callTool('end_strategy', { site_id: site }).then(function (res) { var o = parse(res); if (o.error) { go.disabled = false; state.className = 'state bad'; state.textContent = o.error; B.resize(); return; } render(o); }).catch(function (e) { go.disabled = false; state.className = 'state bad'; state.textContent = (e && e.message) || 'Could not stop'; B.resize(); }); };

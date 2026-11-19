@@ -52,11 +52,11 @@
     },
     {
       "name": "list_sites",
-      "description": "List the user's solar + battery sites across vendors. Returns id (vendor:station_id, used by every other"
+      "description": "Start here: the user's solar + battery sites across vendors, and whose API key this is."
     },
     {
       "name": "get_status",
-      "description": "Live reading: SOC (%), pv_w, load_w, grid_w (>0 exporting), battery_w (>0 charging). A null channel is one"
+      "description": "What one site is doing now, and what it is. Reads only."
     },
     {
       "name": "get_curve",
@@ -80,7 +80,7 @@
     },
     {
       "name": "list_alerts",
-      "description": "The account's alert rules on a site: what each watches (soc %, import/export price c/kWh, forecast"
+      "description": "Read the alerts on a site: the rules and what fired. Never creates or changes a rule."
     },
     {
       "name": "create_alert",
@@ -95,16 +95,8 @@
       "description": "Strategy mode on a site: the AI-written rules running now (name, rules, lease, last action, recent"
     },
     {
-      "name": "preview_strategy",
-      "description": ""
-    },
-    {
       "name": "start_strategy",
-      "description": ""
-    },
-    {
-      "name": "update_strategy_rules",
-      "description": ""
+      "description": "Strategy mode (\"I want to write my own strategy\"): YOU write the rules from what the person wants; the server runs them. Two calls, and the second needs the first. 1) Preview (accept_risk=false, the d"
     },
     {
       "name": "end_strategy",
@@ -112,19 +104,11 @@
     },
     {
       "name": "get_energy_mode",
-      "description": "Current energy mode (selfConsumption | amber_smart = Ai+ | au_forecast_export, au_negative_price, au_smart_energy,"
+      "description": "How the site is run now and how Ai+ is configured. Reads only."
     },
     {
-      "name": "get_ai_plus",
-      "description": "Ai+ (amber_smart) configuration: active or not, engine variant and options, effective settings, and"
-    },
-    {
-      "name": "plan_best_price_discharge",
-      "description": "Propose when to sell: picks the best-paid Amber intervals in the window (HH:MM) for the battery's usable"
-    },
-    {
-      "name": "plan_discharge_to_target",
-      "description": "Propose a steady discharge that lands on target_soc at end (HH:MM, site local), from the real capacity, SOC"
+      "name": "plan_discharge",
+      "description": "Work out when and how hard to discharge. Calculates only: nothing is applied, a read key is enough."
     },
     {
       "name": "register_account",
@@ -143,14 +127,6 @@
       "description": "The Aivy agent playbook: which tools answer which questions, the rules for writes (confirm first, forced"
     },
     {
-      "name": "whoami",
-      "description": "Check the API key: who it belongs to and whether it may control (scope read or control). Without a key"
-    },
-    {
-      "name": "get_site",
-      "description": "Facts about one site: timezone, battery capacity (kWh) and where that figure came from, max charge/discharge"
-    },
-    {
       "name": "connect_site",
       "description": "CHANGES THE ACCOUNT (control scope). Confirm with the user before calling."
     },
@@ -159,19 +135,7 @@
       "description": "CHANGES THE ACCOUNT (control scope). Confirm with the user before calling."
     },
     {
-      "name": "get_alert_events",
-      "description": "What fired on the site, newest first: the rule, the value that tripped it, when, how it was delivered and"
-    },
-    {
-      "name": "send_test_alert_email",
-      "description": "Send one test alert email to the account's verified address so the person sees what an alert looks like."
-    },
-    {
       "name": "set_energy_mode",
-      "description": "CHANGES THE SITE (control scope). Confirm with the user before calling."
-    },
-    {
-      "name": "update_ai_plus",
       "description": "CHANGES THE SITE (control scope). Confirm with the user before calling."
     }
   ],

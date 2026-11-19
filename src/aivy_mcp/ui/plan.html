@@ -57,7 +57,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
     $('sub').textContent = (d.window_start && d.window_end ? d.window_start + ' to ' + d.window_end : '') + (d.timezone ? ' · ' + d.timezone : '');
     if (d.current_mode) { $('mode').textContent = d.current_mode === 'amber_smart' ? 'Ai+ now' : d.current_mode; }
     if (!d.intervals && d.slot) {
-      // plan_discharge_to_target: one steady window at power_w ending at target_soc
+      // goal target_soc: one steady window at power_w ending at target_soc
       document.querySelector('.title').textContent = 'Hold ' + B.esc(d.target_soc) + '% until ' + B.esc(d.end);
       d.intervals = [{ start: d.slot.start, end: d.slot.end, sell_c: null, kwh: d.energy_kwh, power_w: d.power_w }];
       d.window_start = d.start; d.window_end = d.end; d.revenue_dollars = null;

@@ -148,26 +148,24 @@ the playbook, the tool descriptions or the model.
 ## Cards in chat
 
 Hosts that render [MCP Apps](https://github.com/modelcontextprotocol/ext-apps)
-(and ChatGPT through its Apps SDK) show twenty of the tools as cards instead
+(and ChatGPT through its Apps SDK) show sixteen of the tools as cards instead
 of text, in the same style as the Aivy mobile app, light and dark:
 
 | Tool | Card |
 |---|---|
 | `get_status` | SOC ring and the four power flows (solar, home, grid, battery) |
 | `get_prices` | Buying / selling now, the next hours as bars, the best hours to sell highlighted |
-| `plan_best_price_discharge` | Revenue headline, the chosen windows on a timeline and an **Apply** button; the click is the user's yes and calls `set_energy_mode` |
+| `plan_discharge` | The sell plan (revenue headline, the chosen windows on a timeline) or the hold-a-reserve plan, with an **Apply** button; the click is the user's yes and calls `set_energy_mode` |
 | `get_registration_terms` | A sign-up / sign-in form: email, password, permission level and the terms are entered in the card and sent to Aivy by the card itself, never through the chat |
-| `get_energy_mode` | Control panel: today's windows on a 24-hour bar, the pending hand-back, mode buttons and a manual charge / discharge form; the click is the user's yes |
+| `get_energy_mode` | Control panel: today's windows on a 24-hour bar, the pending hand-back, mode buttons and a manual charge / discharge form; under Ai+, its levers as sliders and switches built from the engine's own ranges, with Save. A click is the user's yes |
 | `list_vendors` | Connect a system: pick the brand, enter what it needs (or sign in at the vendor), see the new site appear |
 | `get_curve` | Power history: solar, home, battery, grid lines with SOC |
 | `get_earnings` | A day's net, earned, cost, exported and imported, hour by hour |
 | `get_operations` | Timeline of what the platform did and why |
-| `get_ai_plus` | Ai+ levers as sliders and switches, built from the engine's own ranges; Save |
-| `plan_discharge_to_target` | The hold-a-reserve plan with Apply |
 | `list_alerts` | Alert rules with Delete, and a form to add one; called with the rule the person asked for, the form comes filled in and one click adds it |
 | `create_alert`, `delete_alert` | The same card, already showing the rule just added (marked new) or the remaining rules |
 | `list_sites` | Your sites with a Status button each |
-| `preview_strategy`, `start_strategy`, `get_strategy`, `update_strategy_rules`, `end_strategy` | Strategy mode: the rules the AI wrote in plain words, what they would do right now, the lease and the limits, with Start; then the running strategy with its last action, recent decisions and Stop |
+| `start_strategy`, `get_strategy`, `end_strategy` | Strategy mode: the rules the AI wrote in plain words, what they would do right now, the lease and the limits, with Start; then the running strategy with its last action, recent decisions and Stop |
 
 Every card is one self-contained HTML document (no network, no assets), so
 it works under the extension's default content security policy. Hosts
@@ -179,30 +177,24 @@ locally: `node tests/ui/shoot.mjs` (needs `playwright`).
 | Tool | Changes anything? | What it does |
 |---|---|---|
 | `get_agent_guide` | no | The playbook above |
-| `whoami` | no | Who the key is, read or control; says when there is no key yet |
 | `get_registration_terms`, `register_account`, `verify_registration` | account only | Create an Aivy account from the chat; the key is stored locally |
 | `sign_in` | account only | Create and store a key for an existing account (password used once) |
-| `list_sites` | no | Your sites; ids look like `sungrow:1445844` |
-| `get_site` | no | Capacity, limits, timezone, mode, live SOC |
-| `get_status` | no | Live SOC and power flows |
+| `list_sites` | no | Your sites (ids look like `sungrow:1445844`) and whose key this is, read or control; says when there is no key yet |
+| `get_status` | no | Live SOC and power flows, with the site's capacity, limits, timezone and mode |
 | `get_curve` | no | 5-minute or daily history |
 | `get_earnings` | no | A day's energy, priced at Amber's actual prices |
 | `get_operations` | no | What the platform did and why |
 | `get_prices` | no | Amber prices now and forecast |
-| `list_alerts`, `get_alert_events` | no | Alert rules on a site and what fired |
+| `list_alerts` | no | Alert rules on a site and the 20 most recent firings |
 | `create_alert`, `delete_alert` | account only | Threshold alerts to inbox, push and email; never control the battery |
-| `send_test_alert_email` | no | One test alert to the account's email |
 | `list_vendors` | no | Supported brands and what connecting one needs |
 | `connect_site` | **yes** | Link the user's system (serial + NMI, system id, or an OAuth link to open) |
 | `disconnect_site` | **yes** | Remove a site from the account |
-| `get_energy_mode` | no | Mode, windows, pending hand-back |
-| `set_energy_mode` | **yes** | selfConsumption / amber_smart (Ai+) / au_forecast_export, au_negative_price, au_smart_energy, au_weather_season (AU-01..04 student strategies) / forced (time-boxed) |
-| `get_ai_plus` | no | Ai+ variant, settings and tunable ranges |
-| `update_ai_plus` | **yes** | Change Ai+ levers or variant |
-| `plan_best_price_discharge` | no | Propose a sell schedule from the forecast |
-| `plan_discharge_to_target` | no | Propose a discharge that lands on a SOC at a time |
-| `get_strategy`, `preview_strategy` | no | Strategy mode: what is running; dry-run AI-written rules against the readings |
-| `start_strategy`, `update_strategy_rules`, `end_strategy` | **yes** | Run, change or stop the AI-written rules; the server keeps the limits and hands the site back when it ends |
+| `get_energy_mode` | no | Mode, windows, pending hand-back; Ai+ variant, settings and tunable ranges |
+| `set_energy_mode` | **yes** | selfConsumption / amber_smart (Ai+) / au_forecast_export, au_negative_price, au_smart_energy, au_weather_season (AU-01..04 student strategies) / forced (time-boxed); without a mode, change Ai+ levers or variant |
+| `plan_discharge` | no | Propose a sell schedule from the forecast (`goal: best_price`) or a discharge that lands on a SOC at a time (`goal: target_soc`) |
+| `get_strategy` | no | Strategy mode: what is running |
+| `start_strategy`, `end_strategy` | **yes** | Preview the AI-written rules against the readings (a dry run), then run them or replace the running ones; stop them. Nothing starts without the previewed `proposal_id`; the server keeps the limits and hands the site back when it ends |
 
 ## What the server enforces, whatever the assistant does
 

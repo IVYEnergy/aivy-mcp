@@ -21,7 +21,6 @@ UI_URIS_BY_NAME = {
     "curve": "ui://aivy/curve.html",
     "earnings": "ui://aivy/earnings.html",
     "operations": "ui://aivy/operations.html",
-    "aiplus": "ui://aivy/aiplus.html",
     "alerts": "ui://aivy/alerts.html",
     "sites": "ui://aivy/sites.html",
     "strategy": "ui://aivy/strategy.html",

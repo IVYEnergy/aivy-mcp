@@ -19,18 +19,97 @@ def _client_with(handler) -> client_mod.AivyClient:
 def test_every_tool_is_listed_and_writes_say_so():
     tools = asyncio.run(server.mcp.list_tools())
     names = {t.name for t in tools}
-    assert names == {"whoami", "list_sites", "get_site", "get_status", "get_curve", "get_earnings", "get_operations",
-                     "get_prices", "get_energy_mode", "set_energy_mode", "get_ai_plus", "update_ai_plus",
-                     "plan_best_price_discharge", "plan_discharge_to_target",
+    assert names == {"list_sites", "get_status", "get_curve", "get_earnings", "get_operations",
+                     "get_prices", "get_energy_mode", "set_energy_mode",
+                     "plan_discharge",
                      "list_vendors", "connect_site", "disconnect_site", "get_agent_guide",
-                     "list_alerts", "create_alert", "delete_alert", "get_alert_events", "send_test_alert_email",
+                     "list_alerts", "create_alert", "delete_alert",
                      "get_registration_terms", "register_account", "verify_registration", "sign_in",
-                     "get_strategy", "preview_strategy", "start_strategy", "update_strategy_rules", "end_strategy"}
+                     "get_strategy", "start_strategy", "end_strategy"}
     for t in tools:
-        if t.name in ("set_energy_mode", "update_ai_plus", "connect_site", "disconnect_site"):
+        if t.name in ("set_energy_mode", "connect_site", "disconnect_site"):
             assert "CHANGES THE" in t.description and "Confirm with the user" in t.description
         else:
             assert "CHANGES THE" not in t.description
+
+
+def test_every_tool_carries_a_title_and_the_four_behaviour_hints():
+    """Hosts decide from these whether to ask before a call, so each of the
+    four is stated for every tool rather than left to the protocol default
+    (which is "destructive, open world"). Written out here independently of
+    the server's table."""
+    titles = {
+        "get_registration_terms": "Sign-up terms", "register_account": "Create account (step 1)",
+        "verify_registration": "Create account (step 2)", "sign_in": "Sign in", "get_agent_guide": "Agent playbook",
+        "list_sites": "My sites", "get_status": "Site status", "get_curve": "Power history",
+        "get_earnings": "Day earnings", "get_operations": "Operations log", "get_prices": "Amber prices",
+        "list_vendors": "Supported brands", "connect_site": "Connect a system",
+        "disconnect_site": "Disconnect a system", "list_alerts": "Alert rules", "create_alert": "Add alert",
+        "delete_alert": "Remove alert", "get_strategy": "Running strategy",
+        "start_strategy": "Preview or start strategy", "end_strategy": "Stop strategy",
+        "get_energy_mode": "Energy mode", "set_energy_mode": "Set energy mode", "plan_discharge": "Discharge plan"}
+    writes = {"register_account", "verify_registration", "sign_in", "connect_site", "disconnect_site",
+              "create_alert", "delete_alert", "start_strategy", "end_strategy", "set_energy_mode"}
+    destructive = {"disconnect_site", "delete_alert", "start_strategy", "end_strategy", "set_energy_mode"}
+    repeatable_writes = {"disconnect_site", "delete_alert", "end_strategy"}
+    open_world = {"get_status", "get_curve", "get_earnings", "get_prices", "connect_site", "start_strategy",
+                  "end_strategy", "set_energy_mode", "plan_discharge"}
+    tools = asyncio.run(server.mcp.list_tools())
+    assert {t.name for t in tools} == set(titles)
+    for t in tools:
+        sent = t.model_dump(by_alias=True, exclude_none=True)  # what the host receives
+        assert sent["title"] == titles[t.name], t.name
+        assert sent["annotations"] == {
+            "title": titles[t.name], "readOnlyHint": t.name not in writes, "destructiveHint": t.name in destructive,
+            "idempotentHint": t.name not in writes or t.name in repeatable_writes,
+            "openWorldHint": t.name in open_world}, t.name
+
+
+def test_every_tool_reaches_the_host_with_a_description():
+    """A docstring assembled with + is an expression, not a docstring: the
+    tool is then listed with no description and the model has only its name."""
+    tools = {t.name: t.description or "" for t in asyncio.run(server.mcp.list_tools())}
+    assert [name for name, text in tools.items() if len(text.strip()) < 40] == []
+
+
+def test_descriptions_reach_the_host_without_source_indentation():
+    """A docstring is wrapped and indented for the source file. Sent as it is,
+    every line break carries four spaces to the model, and a phrase that wraps
+    in the source cannot be matched by the ChatGPT export's rewrites."""
+    tools = {t.name: t.description or "" for t in asyncio.run(server.mcp.list_tools())}
+    for name, text in tools.items():
+        assert "  " not in text and "\n\n\n" not in text, name
+        assert all(line == "" or not line.startswith(" ") for line in text.split("\n")), name
+    assert "stores that key on this computer (~/.aivy/credentials.json) so every other tool" in tools["verify_registration"]
+    assert tools["set_energy_mode"].split("\n")[0] == "CHANGES THE SITE (control scope). Confirm with the user before calling."
+
+
+def test_every_argument_says_how_to_fill_it_in():
+    """The input schema is where a host shows the model what an argument
+    means, so each one carries a description, and a closed set of values is
+    an enum the host can check rather than a sentence."""
+    tools = {t.name: t.model_dump(by_alias=True, exclude_none=True)["inputSchema"]  # what the host receives
+             for t in asyncio.run(server.mcp.list_tools())}
+    bare =[f"{name}.{arg}" for name, schema in tools.items()
+            for arg, spec in schema.get("properties", {}).items() if len(spec.get("description", "")) < 10]
+    assert bare == []
+
+    def enum(tool: str, arg: str) -> list:
+        spec = tools[tool]["properties"][arg]
+        return next(s["enum"] for s in [spec, *spec.get("anyOf", [])] if "enum" in s)
+
+    assert enum("set_energy_mode", "mode") == ["selfConsumption", "amber_smart", "au_forecast_export",
+                                               "au_negative_price", "au_smart_energy", "au_weather_season", "forced"]
+    assert enum("set_energy_mode", "action") == ["charge", "discharge"]
+    assert enum("create_alert", "metric") == enum("list_alerts", "metric") == ["soc", "import_price", "export_price",
+                                                                               "temperature"]
+    assert enum("create_alert", "operator") == ["above", "below"]
+    assert enum("sign_in", "scope") == enum("verify_registration", "scope") == ["read", "control"]
+    assert enum("get_curve", "range") == ["1d", "7d", "30d"]
+    assert enum("plan_discharge", "goal") == ["best_price", "target_soc"]
+    rules = tools["start_strategy"]["properties"]["rules"]["description"]
+    assert "first match wins" in rules and "between" in rules, "the rule shape is part of the contract"
+    assert tools["start_strategy"]["required"] == ["site_id", "name", "rules"]
 
 
 def test_set_energy_mode_sends_only_the_given_fields_and_bearer_auth(monkeypatch):
@@ -52,13 +131,76 @@ def test_set_energy_mode_sends_only_the_given_fields_and_bearer_auth(monkeypatch
                             "target_soc": 90}
 
 
+def test_get_energy_mode_carries_the_ai_plus_configuration(monkeypatch):
+    """One read answers both "what mode am I in" and "what can I tune": the
+    Ai+ levers come back under `ai_plus`, on Ai+ or not."""
+    mode = {"id": "sungrow:1", "energy_mode": "selfConsumption", "time_slots": [], "soc_floor_pct": 10.0,
+            "variant": None, "settings": None}
+    ai_plus = {"id": "sungrow:1", "active": False, "variant": "smart", "variant_options": ["smart", "band"],
+               "settings": {"hard_floor": 10}, "soc_floor_pct": 10.0,
+               "tunable": {"hard_floor": {"type": "int", "default": 8, "min": 0, "max": 50, "unit": "%"}}}
+    ai_plus_fails = False
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/sites/sungrow:1/energy-mode"):
+            return httpx.Response(200, json=mode)
+        assert request.url.path.endswith("/sites/sungrow:1/ai-plus") and request.method == "GET"
+        return httpx.Response(503, json={"detail": "busy"}) if ai_plus_fails else httpx.Response(200, json=ai_plus)
+
+    monkeypatch.setattr(server, "_client", _client_with(handler))
+    out = asyncio.run(server.get_energy_mode("sungrow:1"))
+    assert out["energy_mode"] == "selfConsumption" and out["variant"] is None and out["site_id"] == "sungrow:1"
+    assert out["ai_plus"] == {"active": False, "variant": "smart", "variant_options": ["smart", "band"],
+                              "settings": {"hard_floor": 10}, "tunable": ai_plus["tunable"]}
+
+    ai_plus_fails = True  # the mode is still the answer
+    out = asyncio.run(server.get_energy_mode("sungrow:1"))
+    assert out["energy_mode"] == "selfConsumption" and out["ai_plus"]["error"].startswith("503")
+
+    def refused(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(404, json={"detail": {"error": "no such site"}})
+
+    monkeypatch.setattr(server, "_client", _client_with(refused))
+    out = asyncio.run(server.get_energy_mode("sungrow:9"))
+    assert out["error"].startswith("404") and "ai_plus" not in out
+
+
 def test_api_errors_are_returned_as_data_not_raised(monkeypatch):
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(403, json={"detail": {"error": "this API key is read-only"}})
 
     monkeypatch.setattr(server, "_client", _client_with(handler))
-    out = json.loads(asyncio.run(server.update_ai_plus("sungrow:1", {"hard_floor": 20})))
+    out = json.loads(asyncio.run(server.set_energy_mode("sungrow:1", "selfConsumption")))
     assert out["error"].startswith("403") and "read-only" in out["error"]
+
+
+def test_set_energy_mode_without_a_mode_changes_ai_plus_only(monkeypatch):
+    """No mode = the mode stays and the Ai+ levers / engine change (PATCH
+    ai-plus); arguments that only mean something with a mode are refused
+    before anything is sent."""
+    seen = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append((request.method, request.url.path, json.loads(request.content)))
+        return httpx.Response(200, json={"id": "sungrow:1", "variant": "band", "applied": {"hard_floor": 20}})
+
+    monkeypatch.setattr(server, "_client", _client_with(handler))
+    out = json.loads(asyncio.run(server.set_energy_mode("sungrow:1", settings={"hard_floor": 20}, variant="band")))
+    assert out["applied"] == {"hard_floor": 20}
+    assert seen == [("PATCH", "/v1/sites/sungrow:1/ai-plus", {"variant": "band", "settings": {"hard_floor": 20}})]
+
+    seen.clear()  # only the engine
+    asyncio.run(server.set_energy_mode("sungrow:1", variant="smart"))
+    assert seen == [("PATCH", "/v1/sites/sungrow:1/ai-plus", {"variant": "smart", "settings": {}})]
+
+    seen.clear()
+    for kwargs in ({}, {"action": "charge", "power_w": 5000}, {"settings": {"hard_floor": 20}, "duration_minutes": 60},
+                   {"mode": "amber_smart", "settings": {"hard_floor": 20}}):
+        assert "error" in json.loads(asyncio.run(server.set_energy_mode("sungrow:1", **kwargs))), kwargs
+    assert seen == [], "nothing is sent for a call that cannot mean one thing"
+
+    asyncio.run(server.set_energy_mode("sungrow:1", "au_negative_price", settings={"reserve_soc": 60}))
+    assert seen == [("PUT", "/v1/sites/sungrow:1/energy-mode", {"mode": "au_negative_price", "settings": {"reserve_soc": 60}})]
 
 
 def test_without_a_key_the_server_starts_and_tools_say_how_to_get_one(monkeypatch, tmp_path):
@@ -67,7 +209,7 @@ def test_without_a_key_the_server_starts_and_tools_say_how_to_get_one(monkeypatc
     c = client_mod.AivyClient(api_key=None)
     assert not c.has_key
     monkeypatch.setattr(server, "_client", c)
-    out = json.loads(asyncio.run(server.whoami()))
+    out = asyncio.run(server.list_sites())
     assert out["has_key"] is False and "register_account" in out["error"]
     out = asyncio.run(server.get_status("sungrow:1"))  # card tools return structured dicts
     assert "No Aivy API key" in out["error"]
@@ -90,6 +232,8 @@ def test_registration_in_the_chat_stores_the_key_locally_and_uses_it(monkeypatch
                                              "api_key": "aivy_sk_secret123", "note": "store it"})
         if request.url.path.endswith("/me"):
             return httpx.Response(200, json={"user": "Bob", "scope": "read"})
+        if request.url.path.endswith("/sites"):
+            return httpx.Response(200, json={"sites": [], "warnings": []})
         return httpx.Response(404, json={"detail": "nope"})
 
     c = client_mod.AivyClient(api_key=None, api_url="https://example.test/v1")
@@ -107,7 +251,7 @@ def test_registration_in_the_chat_stores_the_key_locally_and_uses_it(monkeypatch
     assert saved["https://example.test/v1"]["api_key"] == "aivy_sk_secret123"
     assert (tmp_path / "credentials.json").stat().st_mode & 0o777 == 0o600
     # The key is in use at once, and a fresh client picks it up from the file.
-    me = json.loads(asyncio.run(server.whoami()))
+    me = asyncio.run(server.list_sites())["account"]
     assert me["user"] == "Bob" and seen[-1][2] == "Bearer aivy_sk_secret123"
     assert client_mod.AivyClient(api_key=None, api_url="https://example.test/v1").api_key == "aivy_sk_secret123"
     # Public calls carried no Authorization header; the verify body asked for a key by name.
@@ -211,7 +355,7 @@ def test_eval_checker_judges_order_forbidden_tools_and_confirmation():
     spec = importlib.util.spec_from_file_location("check", Path(__file__).resolve().parents[1] / "evals/check.py")
     check = importlib.util.module_from_spec(spec); spec.loader.exec_module(check)
     case = next(c for c in check.CASES if c["id"] == "sell-tonight-propose")
-    good = [{"name": "list_sites", "args": {}}, {"name": "plan_best_price_discharge", "args": {"reserve_soc": 20}}]
+    good = [{"name": "list_sites", "args": {}}, {"name": "plan_discharge", "args": {"goal": "best_price", "reserve_soc": 20}}]
     assert check.check(case, good, "Tonight 18:00 to 20:30 would earn about $4.10. Apply it?") == []
     bad = good + [{"name": "set_energy_mode", "args": {"mode": "forced"}}]
     problems = check.check(case, bad, "Done.")
@@ -221,6 +365,12 @@ def test_eval_checker_judges_order_forbidden_tools_and_confirmation():
     assert check.check(apply, [{"name": "set_energy_mode", "args": {"mode": "forced", "action": "charge",
                                 "power_w": 5000, "target_soc": 90, "duration_minutes": 120}}], "Charging.") == []
     assert check.check(apply, [{"name": "set_energy_mode", "args": {"mode": "forced", "action": "charge"}}], "x")
+    # One tool can be both the preview and the write: forbid_args tells them apart.
+    propose = next(c for c in check.CASES if c["id"] == "strategy-propose")
+    preview = {"name": "start_strategy", "args": {"site_id": "sungrow:1", "name": "x", "rules": []}}
+    assert check.check(propose, [preview], "Start it?") == []
+    started = {"name": "start_strategy", "args": {**preview["args"], "accept_risk": True, "proposal_id": "1.a"}}
+    assert any("must not call start_strategy with" in p for p in check.check(propose, [preview, started], "Start it?"))
     # Claude Code stream-json transcripts are understood too.
     import tempfile, os
     lines = [json.dumps({"type": "assistant", "message": {"content": [
@@ -244,7 +394,7 @@ def test_cards_are_registered_as_mcp_apps_resources_and_linked_to_their_tools():
     for uri in UI_URIS:
         assert (resources[uri].mime_type or getattr(resources[uri], "mimeType", None)) == APP_MIME_TYPE
     tools = {t.name: t for t in asyncio.run(server.mcp.list_tools())}
-    for name, uri in (("get_status", UI_URIS_BY_NAME["status"]), ("plan_best_price_discharge", UI_URIS_BY_NAME["plan"]),
+    for name, uri in (("get_status", UI_URIS_BY_NAME["status"]), ("plan_discharge", UI_URIS_BY_NAME["plan"]),
                       ("get_prices", UI_URIS_BY_NAME["prices"])):
         meta = tools[name].meta or {}
         assert meta["ui"]["resourceUri"] == uri and meta["openai/outputTemplate"] == uri
@@ -259,8 +409,30 @@ def test_cards_are_registered_as_mcp_apps_resources_and_linked_to_their_tools():
             "no external assets"
 
 
+def test_list_sites_says_whose_key_it_is(monkeypatch):
+    """The first call of a conversation answers both "which sites" and "may
+    this key control": the account comes back with the sites."""
+    account_down = False
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/me"):
+            return httpx.Response(503, json={"detail": "busy"}) if account_down else \
+                httpx.Response(200, json={"user": "Ann", "scope": "control", "email_alerts": True})
+        return httpx.Response(200, json={"sites": [{"id": "sungrow:1", "name": "Home"}], "warnings": []})
+
+    monkeypatch.setattr(server, "_client", _client_with(handler))
+    out = asyncio.run(server.list_sites())
+    assert [s["id"] for s in out["sites"]] == ["sungrow:1"]
+    assert out["account"] == {"user": "Ann", "scope": "control", "email_alerts": True}
+    account_down = True  # the sites are still the answer
+    out = asyncio.run(server.list_sites())
+    assert [s["id"] for s in out["sites"]] == ["sungrow:1"] and out["account"]["error"].startswith("503")
+
+
 def test_status_card_data_carries_the_site_name_when_known(monkeypatch):
     def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/me"):
+            return httpx.Response(200, json={"user": "Ann", "scope": "read"})
         if request.url.path.endswith("/sites"):
             return httpx.Response(200, json={"sites": [{"id": "sungrow:1", "name": "Home", "vendor": "sungrow"}], "warnings": []})
         return httpx.Response(200, json={"id": "sungrow:1", "soc_pct": 55, "pv_w": 100, "source": "vendor", "at": "2026-11-06T00:00:00+00:00"})
@@ -269,14 +441,76 @@ def test_status_card_data_carries_the_site_name_when_known(monkeypatch):
     asyncio.run(server.list_sites())
     out = asyncio.run(server.get_status("sungrow:1"))
     assert isinstance(out, dict) and out["name"] == "Home" and out["soc_pct"] == 55
-    plan = asyncio.run(server.plan_best_price_discharge("sungrow:1"))
+    plan = asyncio.run(server.plan_discharge("sungrow:1", "best_price"))
     assert plan["site_id"] == "sungrow:1"
 
 
-def test_strategy_mode_proposes_then_starts_only_with_the_person_s_yes(monkeypatch):
+def test_plan_discharge_asks_the_endpoint_its_goal_names(monkeypatch):
+    """One planning tool: goal picks the calculation, and an argument that
+    belongs to the other goal is refused rather than silently dropped."""
+    seen = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append((request.url.path, json.loads(request.content)))
+        return httpx.Response(200, json={"proposed_time_slots": []})
+
+    monkeypatch.setattr(server, "_client", _client_with(handler))
+    asyncio.run(server.plan_discharge("sungrow:1", "best_price", window_start="17:00", window_end="21:00",
+                                      reserve_soc=20, min_sell_c=30))
+    asyncio.run(server.plan_discharge("sungrow:1", "target_soc", window_end="21:00", target_soc=30))
+    assert seen == [("/v1/sites/sungrow:1/plans/best-price-discharge",
+                     {"window_start": "17:00", "window_end": "21:00", "reserve_soc": 20, "min_sell_c": 30}),
+                    ("/v1/sites/sungrow:1/plans/discharge-to-target", {"end": "21:00", "target_soc": 30})]
+    seen.clear()
+    for goal, kwargs in (("best_price", {"target_soc": 30}), ("target_soc", {"target_soc": 30}),
+                         ("target_soc", {"window_end": "21:00"}),
+                         ("target_soc", {"window_end": "21:00", "target_soc": 30, "reserve_soc": 20}), ("cheapest", {})):
+        assert "error" in asyncio.run(server.plan_discharge("sungrow:1", goal, **kwargs)), (goal, kwargs)
+    assert seen == []
+
+
+def test_get_status_carries_the_site_s_facts_with_the_live_reading(monkeypatch):
+    """One read answers "how is it doing" and "how big is it": the reading
+    on top, capacity and limits under `site`. Either half alone is still an
+    answer; both failing is an error."""
+    reading = {"id": "sungrow:7", "at": "2026-11-06T00:00:00+00:00", "soc_pct": 55, "pv_w": 100, "source": "vendor"}
+    facts = {"id": "sungrow:7", "vendor": "sungrow", "name": "Shed", "timezone": "Australia/Adelaide",
+             "battery_capacity_kwh": 13.5, "max_power_w": 5000, "soc_floor_pct": 10.0, "soc_pct": 54.0}
+    down: set[str] = set()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        kind = "reading" if request.url.path.endswith("/status") else "facts"
+        assert request.url.path in ("/v1/sites/sungrow:7/status", "/v1/sites/sungrow:7")
+        if kind in down:
+            return httpx.Response(502, json={"detail": "vendor cloud did not answer"})
+        return httpx.Response(200, json=reading if kind == "reading" else facts)
+
+    monkeypatch.setattr(server, "_client", _client_with(handler))
+    out = asyncio.run(server.get_status("sungrow:7"))
+    assert out["soc_pct"] == 55 and out["source"] == "vendor" and out["name"] == "Shed"
+    assert out["site"] == {k: v for k, v in facts.items() if k != "id"} and "reading_error" not in out
+
+    down.add("reading")  # a site connected a minute ago: no live reading yet, the facts are still shown
+    out = asyncio.run(server.get_status("sungrow:7"))
+    assert "error" not in out and out["reading_error"].startswith("502")
+    assert out["soc_pct"] == 54.0 and out["source"] == "stored" and out["site"]["battery_capacity_kwh"] == 13.5
+
+    down.symmetric_difference_update({"reading", "facts"})  # only the facts are missing
+    out = asyncio.run(server.get_status("sungrow:7"))
+    assert out["soc_pct"] == 55 and out["site"]["error"].startswith("502") and "name" not in out
+
+    down.add("reading")
+    out = asyncio.run(server.get_status("sungrow:7"))
+    assert out["error"].startswith("502") and out["id"] == "sungrow:7" and "site" not in out
+
+
+def test_strategy_mode_previews_then_starts_only_what_was_previewed(monkeypatch):
+    """One tool, two calls: the dry run returns a proposal_id and nothing
+    starts without it, with other rules, on another site, or too late."""
     rules = [{"when": [{"metric": "export_price", "operator": "above", "value": 40}],
               "then": {"action": "discharge", "stop_soc": 30}, "note": "sell spikes"}]
     calls: list[tuple[str, str, dict | None]] = []
+    running = {"status": "none"}
 
     def handler(request: httpx.Request) -> httpx.Response:
         body = json.loads(request.content) if request.content else None
@@ -289,21 +523,55 @@ def test_strategy_mode_proposes_then_starts_only_with_the_person_s_yes(monkeypat
         if request.method == "POST":
             return httpx.Response(200, json={"site_id": "sungrow:1", "status": "active", "name": body["name"],
                                              "rules": body["rules"], "remaining_minutes": 1440})
+        if request.method == "PUT":
+            return httpx.Response(200, json={"site_id": "sungrow:1", "status": "active", "name": "Sell spikes",
+                                             "rules": body["rules"], "remaining_minutes": 600})
         if request.method == "DELETE":
             return httpx.Response(200, json={"site_id": "sungrow:1", "status": "ended", "end_reason": "stopped"})
-        return httpx.Response(200, json={"site_id": "sungrow:1", "status": "none", "limits": {}})
+        return httpx.Response(200, json={"site_id": "sungrow:1", "limits": {}, **running})
+
+    def writes() -> list[tuple[str, str, dict | None]]:
+        return [c for c in calls if c[0] != "GET" and not c[1].endswith("/preview")]
 
     monkeypatch.setattr(server, "_client", _client_with(handler))
-    proposed = asyncio.run(server.preview_strategy("sungrow:1", "Sell spikes", rules, summary="Sell above 40c.",
-                                                   duration_minutes=720))
-    assert proposed["status"] == "proposed" and proposed["would"]["action"] == "discharge"
+    proposed = asyncio.run(server.start_strategy("sungrow:1", "Sell spikes", rules, summary="Sell above 40c.",
+                                                 duration_minutes=720))
+    assert proposed["status"] == "proposed" and proposed["would"]["action"] == "discharge" and "replaces" not in proposed
     assert proposed["proposal"] == {"name": "Sell spikes", "summary": "Sell above 40c.", "rules": rules, "duration_minutes": 720}
-    assert calls[-1][2] == {"rules": rules}, "the preview sends only what the API evaluates"
-    refused = asyncio.run(server.start_strategy("sungrow:1", "Sell spikes", rules, accept_risk=False))
-    assert "error" in refused and len(calls) == 1, "no yes, no call"
-    started = asyncio.run(server.start_strategy("sungrow:1", **{k: v for k, v in proposed["proposal"].items()}, accept_risk=True))
-    assert started["status"] == "active" and calls[-1][2]["accept_risk"] is True and calls[-1][2]["duration_minutes"] == 720
-    assert asyncio.run(server.get_strategy("sungrow:1"))["status"] == "none"
+    assert ("POST", "/v1/sites/sungrow:1/strategy/preview", {"rules": rules}) in calls, "the preview sends only what the API evaluates"
+    assert writes() == [], "a preview starts nothing"
+    proposal, proposal_id = proposed["proposal"], proposed["proposal_id"]
+
+    def start(site_id="sungrow:1", **changes):
+        return asyncio.run(server.start_strategy(site_id, **{**proposal, "accept_risk": True, "proposal_id": proposal_id,
+                                                              **changes}))
+
+    other_rules = [{**rules[0], "then": {"action": "discharge", "stop_soc": 5}}]
+    for refused in (start(proposal_id=None), start(proposal_id="1.abc"), start(rules=other_rules),
+                    start(duration_minutes=10080), start(site_id="sungrow:2")):
+        assert "error" in refused
+    monkeypatch.setattr(server.time, "time", lambda now=server.time.time(): now + 16 * 60)
+    assert "15 minutes" in start()["error"]
+    monkeypatch.undo()
+    monkeypatch.setattr(server, "_client", _client_with(handler))
+    assert writes() == [], "nothing was sent for a start that was not previewed"
+
+    # what comes back from a card: other key order, 40 as 40.0
+    from_card = json.loads(json.dumps(proposal, sort_keys=True).replace('"value": 40', '"value": 40.0'))
+    started = start(**from_card)
+    assert started["status"] == "active"
+    assert writes() == [("POST", "/v1/sites/sungrow:1/strategy", {**from_card, "accept_risk": True})]
+
+    # while one runs, the same two calls replace its rules; the lease moves only when asked
+    running.update(status="active", name="Sell spikes", remaining_minutes=600)
+    calls.clear()
+    again = asyncio.run(server.start_strategy("sungrow:1", "Sell spikes", other_rules))
+    assert again["replaces"] == {"name": "Sell spikes", "remaining_minutes": 600}
+    replaced = asyncio.run(server.start_strategy("sungrow:1", "Sell spikes", other_rules, accept_risk=True,
+                                                 proposal_id=again["proposal_id"]))
+    assert replaced["status"] == "active" and writes() == [("PUT", "/v1/sites/sungrow:1/strategy", {"rules": other_rules})]
+
+    assert asyncio.run(server.get_strategy("sungrow:1"))["status"] == "active"
     assert asyncio.run(server.end_strategy("sungrow:1"))["status"] == "ended"
     assert calls[-1][:2] == ("DELETE", "/v1/sites/sungrow:1/strategy")
 
@@ -311,10 +579,16 @@ def test_strategy_mode_proposes_then_starts_only_with_the_person_s_yes(monkeypat
 def test_alert_writes_return_the_card_already_up_to_date(monkeypatch):
     """A host renders the alerts card for create/delete too, so their result is
     the current rule list plus what changed; list_alerts carries the rule the
-    person asked for as a draft the card fills in."""
+    person asked for as a draft the card fills in, and what fired lately."""
     rules: list[dict] = [{"id": 1, "name": "lower soc", "metric": "soc", "operator": "below", "threshold": 20}]
+    fired = [{"id": 9, "rule_id": 1, "value": 18.0, "at": "2026-11-17T20:10:00+00:00", "emailed": True}]
+    history_down = False
 
     def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/alerts/events"):
+            assert request.url.params["limit"] == "20"
+            return httpx.Response(503, json={"detail": "busy"}) if history_down else \
+                httpx.Response(200, json={"site_id": "sungrow:1", "events": fired})
         if request.method == "POST":
             body = json.loads(request.content)
             rules.append({"id": 2, **body})
@@ -327,7 +601,12 @@ def test_alert_writes_return_the_card_already_up_to_date(monkeypatch):
     monkeypatch.setattr(server, "_client", _client_with(handler))
     listed = asyncio.run(server.list_alerts("sungrow:1", metric="soc", operator="above", threshold=70))
     assert listed["draft"] == {"metric": "soc", "operator": "above", "threshold": 70, "name": "SOC above 70%"}
+    assert listed["events"] == fired and "events_error" not in listed, "one call answers 'did anything fire?'"
     assert "draft" not in asyncio.run(server.list_alerts("sungrow:1"))
+    history_down = True  # the rules still come back, and the gap is said
+    partial = asyncio.run(server.list_alerts("sungrow:1"))
+    assert [r["id"] for r in partial["rules"]] == [1] and partial["events"] == [] and partial["events_error"].startswith("503")
+    history_down = False
     created = asyncio.run(server.create_alert("sungrow:1", "", "soc", "above", 70))
     assert created["created"]["id"] == 2 and created["created"]["name"] == "SOC above 70%"
     assert [r["id"] for r in created["rules"]] == [1, 2] and created["site_id"] == "sungrow:1"
@@ -344,8 +623,8 @@ def test_server_reports_the_package_version_and_the_readme_counts_the_cards():
     readme = (Path(__file__).resolve().parents[1] / "README.md").read_text(encoding="utf-8")
     tools = asyncio.run(server.mcp.list_tools())
     with_card = sum(1 for t in tools if (t.meta or {}).get("openai/outputTemplate"))
-    assert with_card == 20 and len(UI_URIS_BY_NAME) == 13
-    assert "twenty of the tools as cards" in readme
+    assert with_card == 16 and len(UI_URIS_BY_NAME) == 12
+    assert "sixteen of the tools as cards" in readme
     for t in tools:
         if (t.meta or {}).get("openai/outputTemplate"):
             assert f"`{t.name}`" in readme, f"README card table lacks {t.name}"

@@ -198,9 +198,6 @@ class AivyClient:
     async def alert_events(self, site_id: str, limit: int = 50) -> dict:
         return await self._call("GET", f"/sites/{site_id}/alerts/events", params={"limit": limit})
 
-    async def test_alert_email(self) -> dict:
-        return await self._call("POST", "/alerts/test-email")
-
     # ── control ──
     async def energy_mode(self, site_id: str) -> dict:
         return await self._call("GET", f"/sites/{site_id}/energy-mode")

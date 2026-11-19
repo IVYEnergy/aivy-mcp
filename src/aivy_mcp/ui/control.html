@@ -24,6 +24,23 @@ input[type=range] { width: 100%; accent-color: var(--brand); }
 .actions { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
 .state { font-size: 12px; color: var(--text2); } .state.ok { color: var(--brand); } .state.bad { color: var(--danger); }
 .floor { font-size: 12px; color: var(--text3); }
+.aiplus { border-top: 1px solid var(--border); margin-top: 14px; padding-top: 10px; }
+.aiplus .head { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+.vseg { display: flex; gap: 6px; margin: 4px 0 10px; }
+.vseg button { flex: 1; appearance: none; border: 1px solid var(--border); background: var(--surface); color: var(--text2); border-radius: 10px; padding: 8px 6px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; text-transform: capitalize; }
+.vseg button.on { background: var(--brand-light); color: var(--brand); border-color: transparent; }
+.lever { display: grid; grid-template-columns: 1fr 120px; gap: 10px; align-items: center; padding: 8px 0; border-top: 1px solid var(--border); }
+.lever:first-child { border-top: 0; }
+.lever .k { font-size: 13px; }
+.lever .k small { display: block; font-size: 11px; color: var(--text3); }
+.lever .num { display: flex; align-items: center; gap: 4px; justify-content: flex-end; }
+.lever input[type=number] { width: 76px; padding: 5px 8px; border-radius: 8px; text-align: right; }
+.lever .unit { font-size: 11px; color: var(--text3); }
+.lever.changed .k { color: var(--brand); }
+.switch { width: 40px; height: 22px; border-radius: 11px; background: var(--border); position: relative; cursor: pointer; justify-self: end; }
+.switch.on { background: var(--brand); }
+.switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: left .15s; }
+.switch.on::after { left: 20px; }
 </style>
 </head>
 <body>
@@ -59,9 +76,15 @@ input[type=range] { width: 100%; accent-color: var(--brand); }
       </div>
       <div class="actions"><button class="btn" id="apply">Apply</button><span class="state" id="state"></span></div>
       <div class="floor" id="floor"></div>
+      <div class="aiplus" id="aiplus" hidden>
+        <div class="head"><span>Ai+ settings</span><span class="chip" id="aiactive"></span></div>
+        <div class="vseg" id="variants"></div>
+        <div id="levers"></div>
+        <div class="actions"><button class="btn" id="save" disabled>Save</button><button class="btn ghost" id="reset">Reset</button><span class="state" id="aistate"></span></div>
+      </div>
     </div>
   </div>
-  <div class="card-foot"><span>Manual mode always hands back to the previous mode when its time is up. The SOC floor and export limits stay in force.</span></div>
+  <div class="card-foot"><span>Manual mode always hands back to the previous mode when its time is up. The SOC floor and export limits stay in force. Ai+ values are checked against the engine's ranges; if any is out of range nothing changes.</span></div>
 </div>
 <script>/*BRIDGE_JS*/</script>
 <script>
@@ -69,6 +92,33 @@ input[type=range] { width: 100%; accent-color: var(--brand); }
   var B = window.AivyBridge, $ = function (id) { return document.getElementById(id); };
   var LABEL = { selfConsumption: 'Self-use', amber_smart: 'Ai+', au_forecast_export: 'AU-01 Smart export', au_negative_price: 'AU-02 Negative price', au_smart_energy: 'AU-03 Smart energy', au_weather_season: 'AU-04 Weather storage', forced: 'Manual' };
   var data = null, chosen = null;
+  // Ai+ levers: shown under the Ai+ mode button, built from the engine's own ranges (ai_plus.tunable).
+  var ai = null, variant = null, current = {}, edited = {};
+  function parse(res) { var out = res; if (res && res.content && res.content[0] && res.content[0].text) { try { out = JSON.parse(res.content[0].text); } catch (e) {} } if (out && out.structuredContent) out = out.structuredContent; return out || {}; }
+  function leverLabel(k) { return k.replace(/_/g, ' ').replace(/\bc\b/, '¢').replace(/^\w/, function (c) { return c.toUpperCase(); }); }
+  function dirty() { var n = Object.keys(edited).length + (variant !== ai.variant ? 1 : 0); $('save').disabled = !n; $('save').textContent = n ? 'Save ' + n + ' change' + (n > 1 ? 's' : '') : 'Save'; }
+  function renderAi() {
+    $('aiactive').textContent = ai.active ? 'running' : 'not the mode now'; $('aiactive').className = 'chip ' + (ai.active ? 'brand' : 'warn');
+    $('variants').innerHTML = ''; (ai.variant_options || [ai.variant]).forEach(function (v) { var b = document.createElement('button'); b.textContent = v; b.className = v === variant ? 'on' : ''; b.onclick = function () { variant = v; renderAi(); dirty(); }; $('variants').appendChild(b); });
+    var box = $('levers'); box.innerHTML = '';
+    var specs = ai.tunable || {};
+    Object.keys(specs).forEach(function (k) {
+      var s = specs[k], v = edited.hasOwnProperty(k) ? edited[k] : (current[k] !== undefined ? current[k] : s.default);
+      var row = document.createElement('div'); row.className = 'lever' + (edited.hasOwnProperty(k) ? ' changed' : '');
+      if (s.type === 'bool') {
+        row.innerHTML = '<div class="k">' + B.esc(leverLabel(k)) + '</div>';
+        var sw = document.createElement('div'); sw.className = 'switch' + (v ? ' on' : ''); sw.onclick = function () { edited[k] = !v; if (edited[k] === current[k]) delete edited[k]; renderAi(); dirty(); }; row.appendChild(sw);
+      } else {
+        var step = s.step || 1, min = s.min !== null && s.min !== undefined ? s.min : 0, max = s.max !== null && s.max !== undefined ? s.max : 100;
+        row.innerHTML = '<div class="k">' + B.esc(leverLabel(k)) + '<small>' + B.esc(min + ' to ' + max + (s.unit ? ' ' + s.unit : '')) + ' · default ' + B.esc(s.default) + '</small><input type="range" min="' + min + '" max="' + max + '" step="' + step + '" value="' + B.esc(v) + '"></div><div class="num"><input type="number" min="' + min + '" max="' + max + '" step="' + step + '" value="' + B.esc(v) + '"><span class="unit">' + B.esc(s.unit || '') + '</span></div>';
+        var r = row.querySelector('input[type=range]'), nI = row.querySelector('input[type=number]');
+        var set = function (val) { val = +val; if (isNaN(val)) return; r.value = val; nI.value = val; if (val === (current[k] !== undefined ? current[k] : s.default)) delete edited[k]; else edited[k] = val; row.className = 'lever' + (edited.hasOwnProperty(k) ? ' changed' : ''); dirty(); };
+        r.oninput = function () { set(r.value); }; nI.onchange = function () { set(nI.value); };
+      }
+      box.appendChild(row);
+    });
+    B.resize();
+  }
   function mins(hhmm) { var p = (hhmm || '00:00').split(':'); return (+p[0]) * 60 + (+p[1]); }
   function drawSlots(slots) {
     var tl = $('tl'); tl.innerHTML = '';
@@ -87,6 +137,7 @@ input[type=range] { width: 100%; accent-color: var(--brand); }
     chosen = mode;
     document.querySelectorAll('.seg button').forEach(function (b) { b.className = b.dataset.mode === mode ? 'on' : ''; });
     $('manual').hidden = mode !== 'forced';
+    $('aiplus').hidden = !(mode === 'amber_smart' && ai);
     $('apply').disabled = mode === data.energy_mode && mode !== 'forced';
     $('apply').textContent = mode === 'forced' ? 'Start now' : mode === data.energy_mode ? 'Current mode' : 'Switch to ' + LABEL[mode];
     B.resize();
@@ -102,8 +153,21 @@ input[type=range] { width: 100%; accent-color: var(--brand); }
     drawSlots(d.time_slots);
     if (d.reverts_at) { $('revert').hidden = false; $('revert').textContent = 'Hands back to ' + (LABEL[d.reverts_to] || d.reverts_to) + ' at ' + new Date(d.reverts_at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }); } else { $('revert').hidden = true; }
     $('floor').textContent = d.soc_floor_pct !== null && d.soc_floor_pct !== undefined ? 'SOC floor ' + d.soc_floor_pct + '%' : '';
+    ai = d.ai_plus && d.ai_plus.tunable ? d.ai_plus : null;
+    if (ai) { variant = ai.variant; current = Object.assign({}, ai.settings || {}); edited = {}; renderAi(); dirty(); }
     pick(d.energy_mode); sync(); B.resize();
   });
+  $('reset').onclick = function () { edited = {}; variant = ai.variant; renderAi(); dirty(); $('aistate').textContent = ''; };
+  $('save').onclick = function () {
+    var state = $('aistate'); state.className = 'state'; state.textContent = 'Saving…'; $('save').disabled = true;
+    var args = { site_id: data.id || data.site_id, settings: edited }; if (variant !== ai.variant) args.variant = variant;
+    B.callTool('set_energy_mode', args).then(function (res) {
+      var out = parse(res);
+      if (out.error) { state.className = 'state bad'; state.textContent = out.error + (out.rejected ? ': ' + out.rejected.join('; ') : ''); $('save').disabled = false; return; }
+      current = Object.assign({}, out.settings || current, out.applied || {}); ai.variant = out.variant || variant; variant = ai.variant; edited = {};
+      state.className = 'state ok'; state.textContent = 'Saved · the engine picks it up on its next tick'; renderAi(); dirty();
+    }).catch(function (e) { state.className = 'state bad'; state.textContent = (e && e.message) || 'Could not save'; $('save').disabled = false; });
+  };
   $('apply').onclick = function () {
     var btn = $('apply'), state = $('state'); btn.disabled = true; state.className = 'state'; state.textContent = 'Applying…';
     var args = { site_id: data.id || data.site_id, mode: chosen };
@@ -115,7 +179,7 @@ input[type=range] { width: 100%; accent-color: var(--brand); }
       var out = res; if (res && res.content && res.content[0] && res.content[0].text) { try { out = JSON.parse(res.content[0].text); } catch (e) {} } if (out && out.structuredContent) out = out.structuredContent;
       if (out && out.error) { state.className = 'state bad'; state.textContent = out.error; btn.disabled = false; return; }
       state.className = 'state ok'; state.textContent = 'Applied' + (out && out.reverts_at ? ' · hands back ' + new Date(out.reverts_at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) : '');
-      if (out && out.energy_mode) { data.energy_mode = out.energy_mode; data.time_slots = out.time_slots || []; data.reverts_at = out.reverts_at; data.reverts_to = out.reverts_to; $('modechip').textContent = LABEL[out.energy_mode] || out.energy_mode; drawSlots(data.time_slots); if (out.reverts_at) { $('revert').hidden = false; $('revert').textContent = 'Hands back to ' + (LABEL[out.reverts_to] || out.reverts_to) + ' at ' + new Date(out.reverts_at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }); } pick(out.energy_mode); }
+      if (out && out.energy_mode) { data.energy_mode = out.energy_mode; data.time_slots = out.time_slots || []; data.reverts_at = out.reverts_at; data.reverts_to = out.reverts_to; $('modechip').textContent = LABEL[out.energy_mode] || out.energy_mode; drawSlots(data.time_slots); if (out.reverts_at) { $('revert').hidden = false; $('revert').textContent = 'Hands back to ' + (LABEL[out.reverts_to] || out.reverts_to) + ' at ' + new Date(out.reverts_at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }); } if (ai) { ai.active = out.energy_mode === 'amber_smart'; renderAi(); } pick(out.energy_mode); }
     }).catch(function (e) { state.className = 'state bad'; state.textContent = (e && e.message) || 'Could not apply'; btn.disabled = false; });
   };
 })();

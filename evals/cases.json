@@ -1,5 +1,5 @@
 {
-  "_about": "Conversation cases for the Aivy agent playbook. Each case gives the user's message and what a well-behaved agent does with the tools: the order it must follow (`expect`, a subsequence), tools it must not call (`forbid`), and whether the turn must end in a question (`confirm`) rather than a write. Feed a transcript's tool-call list to evals/check.py.",
+  "_about": "Conversation cases for the Aivy agent playbook. Each case gives the user's message and what a well-behaved agent does with the tools: the order it must follow (`expect`, a subsequence), tools it must not call (`forbid`) or must not call with certain arguments (`forbid_args`: a tool that previews and writes is told apart by them), and whether the turn must end in a question (`confirm`) rather than a write. Feed a transcript's tool-call list to evals/check.py.",
   "cases": [
     {
       "id": "status",
@@ -8,8 +8,7 @@
         "get_status"
       ],
       "forbid": [
-        "set_energy_mode",
-        "update_ai_plus"
+        "set_energy_mode"
       ],
       "confirm": false
     },
@@ -29,25 +28,29 @@
       "id": "sell-tonight-propose",
       "user": "Sell at the best prices tonight, keep 20%.",
       "expect": [
-        "plan_best_price_discharge"
+        "plan_discharge"
       ],
       "forbid": [
         "set_energy_mode"
       ],
       "confirm": true,
+      "args": {
+        "plan_discharge": {
+          "goal": "best_price"
+        }
+      },
       "note": "The first turn proposes; the write waits for a yes."
     },
     {
       "id": "sell-tonight-apply",
       "user": "Yes, apply it.",
       "prior": [
-        "plan_best_price_discharge"
+        "plan_discharge"
       ],
       "expect": [
         "set_energy_mode"
       ],
       "forbid": [
-        "update_ai_plus",
         "connect_site"
       ],
       "confirm": false,
@@ -100,21 +103,26 @@
       "id": "keep-for-evening",
       "user": "Keep 30% for 9pm.",
       "expect": [
-        "plan_discharge_to_target"
+        "plan_discharge"
       ],
       "forbid": [
         "set_energy_mode"
       ],
-      "confirm": true
+      "confirm": true,
+      "args": {
+        "plan_discharge": {
+          "goal": "target_soc"
+        }
+      }
     },
     {
       "id": "tune-aiplus",
       "user": "Make Ai+ a bit more aggressive on exports.",
       "expect": [
-        "get_ai_plus"
+        "get_energy_mode"
       ],
       "forbid": [
-        "update_ai_plus"
+        "set_energy_mode"
       ],
       "confirm": true
     },
@@ -246,7 +254,7 @@
       "id": "alert-propose",
       "user": "Email me when the battery drops below 20%.",
       "expect": [
-        "whoami"
+        "list_sites"
       ],
       "forbid": [
         "create_alert",
@@ -259,7 +267,7 @@
       "id": "alert-apply",
       "user": "Yes.",
       "prior": [
-        "whoami"
+        "list_sites"
       ],
       "expect": [
         "create_alert"
@@ -278,20 +286,24 @@
       "id": "strategy-propose",
       "user": "I want to write my own strategy: sell above 40c but keep 30%, charge when import is negative, hold overnight.",
       "expect": [
-        "preview_strategy"
+        "start_strategy"
       ],
       "forbid": [
-        "start_strategy",
         "set_energy_mode"
       ],
+      "forbid_args": {
+        "start_strategy": {
+          "accept_risk": true
+        }
+      },
       "confirm": true,
-      "note": "Read status/prices/site first, write the rules (safety rule first), preview them; on a card host the Start click is the yes, otherwise read them back and ask."
+      "note": "Read status/prices/site first, write the rules (safety rule first), preview them with start_strategy (accept_risk false); on a card host the Start click is the yes, otherwise read them back and ask."
     },
     {
       "id": "strategy-apply",
       "user": "Yes, start it.",
       "prior": [
-        "preview_strategy"
+        "start_strategy"
       ],
       "expect": [
         "start_strategy"
@@ -350,7 +362,7 @@
       "id": "no-key-first-message",
       "user": "How's my battery?",
       "expect": [
-        "whoami"
+        "list_sites"
       ],
       "forbid": [
         "register_account",
